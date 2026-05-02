@@ -1,0 +1,14 @@
+# DayShield ISO builder — Git ignore file
+
+# Intermediate build artefacts
+build/
+
+# Generated ISO
+*.iso
+
+# Editor / OS artefacts
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
