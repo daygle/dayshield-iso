@@ -135,7 +135,6 @@ xorriso -as mkisofs \
     -boot-info-table \
     --grub2-boot-info \
     "${XORRISO_EXTRA_ARGS[@]}" \
-    -set_all_file_dates 0 \
     -output "${OUTPUT}" \
     "${ISO_ROOT}"
 
