@@ -36,9 +36,9 @@ KERNEL_VERSION="${KVER}"
 echo "--> Building initrd (kernel: ${KERNEL_VERSION:-unknown}) …"
 
 # ---------------------------------------------------------------------------
-# Embed installer scripts
+# Embed installer scripts into the ROOTFS (so mkinitramfs can see them)
 # ---------------------------------------------------------------------------
-INSTALLER_EMBED_DIR="${INITRD_WORK}/usr/lib/dayshield-installer"
+INSTALLER_EMBED_DIR="${ROOTFS_DIR}/usr/lib/dayshield-installer"
 mkdir -p "${INSTALLER_EMBED_DIR}"
 
 if [[ -d "${INSTALLER_SRC}" ]]; then
@@ -84,23 +84,29 @@ EOF
 elif command -v mkinitramfs &>/dev/null; then
     echo "--> Using mkinitramfs (chrooted) …"
 
-    # Create hook directory inside rootfs
+    # Create hook inside rootfs
     mkdir -p "${ROOTFS_DIR}/etc/initramfs-tools/hooks"
 
     cat > "${ROOTFS_DIR}/etc/initramfs-tools/hooks/dayshield-installer" <<'HOOK'
 #!/bin/sh
 PREREQ=""
 prereqs() { echo "$PREREQ"; }
-case "$1" in prereqs) prereqs; exit 0 ;; esac
+case "$1" in
+    prereqs) prereqs; exit 0 ;;
+esac
 
 . /usr/share/initramfs-tools/hook-functions
 
-copy_exec /usr/lib/dayshield-installer/ /usr/lib/dayshield-installer
+# Copy installer payload into the initrd
+mkdir -p "${DESTDIR}/usr/lib/dayshield-installer"
+if [ -d /usr/lib/dayshield-installer ]; then
+    cp -a /usr/lib/dayshield-installer/. "${DESTDIR}/usr/lib/dayshield-installer/"
+fi
 HOOK
 
     chmod 755 "${ROOTFS_DIR}/etc/initramfs-tools/hooks/dayshield-installer"
 
-    # Run mkinitramfs inside the rootfs so it sees the correct modules
+    # Run mkinitramfs inside the rootfs so it sees the correct modules + payload
     chroot "${ROOTFS_DIR}" mkinitramfs -o /tmp/initrd.img "${KERNEL_VERSION}"
 
     # Copy initrd out of chroot
