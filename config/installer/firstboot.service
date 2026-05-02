@@ -1,0 +1,15 @@
+[Unit]
+Description=DayShield First-Boot Initialization
+Documentation=https://dayshield.local/docs
+After=network.target
+ConditionPathExists=/etc/dayshield/.firstboot
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/dayshield-installer/firstboot-run.sh
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target
