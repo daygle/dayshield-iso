@@ -5,7 +5,8 @@
 #   /boot/grub/         — GRUB configuration, modules, bios.img
 #   /EFI/BOOT/          — UEFI binaries
 #   /EFI/efiboot.img    — FAT EFI system partition image (appended partition)
-#   /live/              — kernel, initrd, squashfs
+#   /live/              — squashfs
+#   /boot/              — kernel + initrd (FIXED)
 #   /installer/         — installer scripts
 
 set -euo pipefail
@@ -58,12 +59,17 @@ mkdir -p \
     "${ISO_ROOT}/boot/grub" \
     "${ISO_ROOT}/EFI/BOOT" \
     "${ISO_ROOT}/live" \
+    "${ISO_ROOT}/boot" \
     "${ISO_ROOT}/installer"
 
-# Live files
+# Live squashfs
 cp "${SQUASHFS_IMG}"              "${ISO_ROOT}/live/filesystem.squashfs"
-cp "${KERNEL_DIR}/vmlinuz"        "${ISO_ROOT}/live/vmlinuz"
-cp "${KERNEL_DIR}/initrd.img"     "${ISO_ROOT}/live/initrd.img"
+
+# ---------------------------------------------------------------------------
+# FIX: Kernel + initrd must be in /boot for GRUB
+# ---------------------------------------------------------------------------
+cp "${KERNEL_DIR}/vmlinuz"        "${ISO_ROOT}/boot/vmlinuz"
+cp "${KERNEL_DIR}/initrd.img"     "${ISO_ROOT}/boot/initrd.img"
 
 # GRUB BIOS boot files
 cp "${BOOT_DIR}/boot/grub/grub.cfg"  "${ISO_ROOT}/boot/grub/grub.cfg"
