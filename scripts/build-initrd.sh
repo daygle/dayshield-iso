@@ -59,10 +59,12 @@ if command -v dracut &>/dev/null; then
     DRACUT_CONF="$(mktemp --suffix=.conf)"
     cat > "${DRACUT_CONF}" <<'EOF'
 # DayShield installer initrd configuration
-add_dracutmodules+=" systemd network base rootfs-block "
-add_drivers+=" ext4 xfs btrfs "
+# 'network' is intentionally omitted — not available on all build hosts and
+# not required for live squashfs boot; networking starts post-pivot via
+# systemd-networkd in the live environment.
+add_dracutmodules+=" systemd base rootfs-block "
+add_drivers+=" ext4 xfs btrfs squashfs loop "
 omit_dracutmodules+=" ipv6 "
-install_items+=" /usr/lib/dayshield-installer "
 compress="zstd"
 EOF
 
