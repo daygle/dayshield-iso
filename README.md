@@ -150,6 +150,10 @@ kernel → initrd → bootloader → assemble) and produces:
 make verify ISO=dayshield.iso
 ```
 
+> **Note:** `verify.sh` currently expects installer assets under
+> `/installer-ui/`. Build with `INSTALLER_UI=...` when you intend to run
+> `make verify`.
+
 ---
 
 ### Phase 7 - Boot the ISO in QEMU
@@ -192,9 +196,8 @@ launched on tty1.
 ### Phase 8 - Run the installer
 
 The installer web UI starts automatically.  It is bound to
-`127.0.0.1:8080` (localhost only) and is accessible from within the live
-environment on tty1 via `w3m` (text browser) or a graphical browser if one
-is installed.
+`0.0.0.0:8080` and is accessible from tty1 (if a supported browser is
+available) or from another machine on the same network.
 
 Installation steps:
 
@@ -284,7 +287,6 @@ dayshield-iso/
 ├── config/
 │   ├── grub.cfg                  # GRUB boot menu
 │   ├── isolinux.cfg              # ISOLINUX/SYSLINUX fallback menu
-│   ├── splash.png                # Optional boot splash (place here)
 │   └── installer/
 │       ├── install.sh              # CLI installer orchestrator (fallback)
 │       ├── partition.sh            # GPT disk partitioning
@@ -319,6 +321,11 @@ The built ISO is written to `dayshield.iso` (or the path given via `OUTPUT=`).
 
 `INSTALLER_UI` is optional but strongly recommended - without it the web-based
 installer UI will not be present in the live environment.
+
+When `INSTALLER_UI` is set, these files are required and validated before the
+pipeline starts: `index.html`, `styles.css`, `app.js`, `alpine.min.js`,
+`httpd.conf`, `systemd/installer-ui.service`, and
+`systemd/installer-ui-web.service`.
 
 ### Manual invocation
 
@@ -398,6 +405,9 @@ make verify-qemu ISO=dayshield.iso
 make verify-qemu ISO=dayshield.iso OVMF=/usr/share/OVMF/OVMF_CODE.fd
 ```
 
+> `verify.sh` expects installer assets under `/installer-ui/`, so build with
+> `INSTALLER_UI=...` before running these checks.
+
 ---
 
 ## Running the installer
@@ -406,11 +416,12 @@ Boot the ISO in a VM or on bare metal.  When the `installer` kernel parameter
 is present (the default in all boot menu entries), the live environment
 automatically starts the **web-based installer UI** on `tty1`:
 
-- `installer-ui-web.service` - serves the installer on `http://127.0.0.1:8080`
+- `installer-ui-web.service` - serves the installer on `http://0.0.0.0:8080`
 - `installer-ui.service` - opens a browser on `tty1` pointing at the above URL
 
-If a graphical browser (`surf`, `midori`) is unavailable, `w3m` is used as a
-text-browser fallback.  The URL is always `http://127.0.0.1:8080/`.
+Browser launch order on tty1 is: `epiphany-browser`, `firefox`, `chromium`,
+`surf`, then `midori`. If none are installed, the service prints instructions
+to open the installer from another machine at `http://<live-ip>:8080/`.
 
 ### Web UI installation flow
 
