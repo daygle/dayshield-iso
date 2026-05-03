@@ -20,12 +20,20 @@ mkdir -p "${KERNEL_DIR}"
 
 echo "--> Locating kernel in rootfs …"
 
-# Search for vmlinuz in the rootfs
+# Prefer non-RT kernel — RT kernels require CONSTANT_TSC which QEMU TCG does
+# not provide, causing hangs.  Fall back to RT only if nothing else is present.
 VMLINUZ="$(find "${ROOTFS_DIR}/boot" -maxdepth 1 -name 'vmlinuz*' -type f 2>/dev/null \
-           | sort -V | tail -n1 || true)"
+           | grep -v '\-rt' | sort -V | tail -n1 || true)"
+# Fall back to RT if no non-RT kernel is found
+if [[ -z "${VMLINUZ}" ]]; then
+    VMLINUZ="$(find "${ROOTFS_DIR}/boot" -maxdepth 1 -name 'vmlinuz*' -type f 2>/dev/null \
+               | sort -V | tail -n1 || true)"
+fi
 
-INITRD="$(find "${ROOTFS_DIR}/boot" -maxdepth 1 -name 'initrd.img*' -type f 2>/dev/null \
-          | sort -V | tail -n1 || true)"
+KVER="$(basename "${VMLINUZ}" | sed 's/vmlinuz-//')"
+INITRD="$(find "${ROOTFS_DIR}/boot" -maxdepth 1 -name "initrd.img-${KVER}" -type f 2>/dev/null \
+          || find "${ROOTFS_DIR}/boot" -maxdepth 1 -name 'initrd.img*' -type f 2>/dev/null \
+          | grep -v '\-rt' | sort -V | tail -n1 || true)"
 
 # ---------------------------------------------------------------------------
 # Fallback: install kernel inside chroot if not present
