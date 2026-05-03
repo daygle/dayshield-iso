@@ -69,6 +69,24 @@ echo "    arch    : ${ARCH}"
 echo "    build   : ${BUILD_DIR}"
 [[ -n "${INSTALLER_UI_DIR}" ]] && echo "    installer-ui: ${INSTALLER_UI_DIR}"
 
+validate_installer_ui() {
+    local dir="$1"
+    local missing=0
+    for file in index.html app.js alpine.min.js httpd.conf systemd/installer-ui.service systemd/installer-ui-web.service; do
+        if [ ! -e "${dir}/${file}" ]; then
+            echo "ERROR: missing installer UI asset: ${file}" >&2
+            missing=1
+        fi
+    done
+    if [ "${missing}" -ne 0 ]; then
+        exit 1
+    fi
+}
+
+if [[ -n "${INSTALLER_UI_DIR}" ]]; then
+    validate_installer_ui "${INSTALLER_UI_DIR}"
+fi
+
 # ---------------------------------------------------------------------------
 # Helper: run a sub-script with consistent environment
 # ---------------------------------------------------------------------------
