@@ -72,7 +72,7 @@ if command -v dracut &>/dev/null && [[ -n "${DRACUT_LIVE_MODULE}" ]]; then
 # systemd-networkd in the live environment.
 add_dracutmodules+=" systemd base rootfs-block "
 add_drivers+=" ext4 xfs btrfs squashfs loop "
-omit_dracutmodules+=" ipv6 "
+omit_dracutmodules+=" ipv6 bluetooth iscsi "
 compress="zstd"
 EOF
 
