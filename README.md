@@ -33,7 +33,11 @@ from scratch on a Debian 13 build host.  Follow these phases in order.
 ```sh
 # Install all required build tools
 sudo apt-get update
-sudo apt-get install -y git curl rustc cargo mmdebstrap zstd systemd-container xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin dosfstools dracut util-linux parted rsync qemu-system-x86 ovmf
+sudo apt-get install -y git curl mmdebstrap zstd systemd-container xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin dosfstools dracut util-linux parted rsync qemu-system-x86 ovmf
+
+# Install Rust via rustup (do NOT install rustc/cargo/rustup from apt)
+curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain 1.88.0
+source "$HOME/.cargo/env"
 ```
 
 ---
@@ -55,6 +59,14 @@ git clone https://github.com/daygle/dayshield-core
 The rootfs builder copies the compiled binary into the rootfs.  Without it a
 non-functional placeholder is installed and the `dayshield` service will fail
 at runtime.
+
+If you installed Rust with rustup in Phase 1, ensure your shell has Cargo on
+PATH before building:
+
+```sh
+source "$HOME/.cargo/env"
+rustc --version
+```
 
 ```sh
 cd ~/dayshield-core
