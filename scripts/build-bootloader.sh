@@ -90,9 +90,20 @@ echo "--> Building GRUB UEFI image …"
 if [[ -n "${GRUB_X64_LIB}" ]]; then
     GRUBX64_EFI="${EFI_DIR}/BOOTX64.EFI"
 
+    # Embed a tiny search script so GRUB can locate the ISO by label at UEFI
+    # boot time.  Without this, (cd) is not a valid device alias in EFI mode
+    # and GRUB drops straight to a shell.
+    GRUB_EMBEDDED_CFG="${BUILD_DIR}/grub-embedded.cfg"
+    cat > "${GRUB_EMBEDDED_CFG}" <<'EMBEDDED_EOF'
+search --no-floppy --label --set=root DAYSHIELD
+set prefix=($root)/boot/grub
+configfile /boot/grub/grub.cfg
+EMBEDDED_EOF
+
     grub-mkimage \
         --directory="${GRUB_X64_LIB}" \
-        --prefix="(cd)/boot/grub" \
+        --prefix="/boot/grub" \
+        --config="${GRUB_EMBEDDED_CFG}" \
         --output="${GRUBX64_EFI}" \
         --format="x86_64-efi" \
         --compression="auto" \
@@ -124,10 +135,12 @@ EFI_MOUNT="$(mktemp -d)"
 mount -o loop "${EFI_IMG}" "${EFI_MOUNT}"
 trap 'umount "${EFI_MOUNT}" 2>/dev/null; rm -rf "${EFI_MOUNT}"' EXIT
 
-mkdir -p "${EFI_MOUNT}/EFI/BOOT"
+mkdir -p "${EFI_MOUNT}/EFI/BOOT" "${EFI_MOUNT}/boot/grub"
 [[ -f "${EFI_DIR}/BOOTX64.EFI" ]] && \
     cp "${EFI_DIR}/BOOTX64.EFI" "${EFI_MOUNT}/EFI/BOOT/BOOTX64.EFI"
-cp "${GRUB_BIOS_DIR}/grub.cfg" "${EFI_MOUNT}/EFI/BOOT/grub.cfg" 2>/dev/null || true
+# Place grub.cfg at the prefix path so GRUB finds it from inside the FAT image
+# before the search command locates the ISO root.
+cp "${GRUB_BIOS_DIR}/grub.cfg" "${EFI_MOUNT}/boot/grub/grub.cfg"
 
 umount "${EFI_MOUNT}"
 rm -rf "${EFI_MOUNT}"
