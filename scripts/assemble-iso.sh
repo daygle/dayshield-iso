@@ -84,7 +84,7 @@ cp "${BOOT_DIR}/boot/grub/bios.img"  "${ISO_ROOT}/boot/grub/bios.img"
     cp "${BOOT_DIR}/boot/grub/splash.png" "${ISO_ROOT}/boot/grub/splash.png"
 
 # Copy any GRUB locale/module directories that may be present
-for sub in fonts locale i386-pc; do
+for sub in fonts locale i386-pc x86_64-efi; do
     [[ -d "${BOOT_DIR}/boot/grub/${sub}" ]] && \
         cp -r "${BOOT_DIR}/boot/grub/${sub}" "${ISO_ROOT}/boot/grub/${sub}"
 done
