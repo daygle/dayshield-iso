@@ -56,7 +56,15 @@ check() {
 # ---------------------------------------------------------------------------
 ISO_MOUNT="$(mktemp -d)"
 mount -o loop,ro "${ISO}" "${ISO_MOUNT}"
-trap 'umount "${ISO_MOUNT}" 2>/dev/null; rm -rf "${ISO_MOUNT}"' EXIT
+_cleanup() {
+    local _rc=$?
+    umount "${SQ_MOUNT:-}" 2>/dev/null || true
+    rm -rf  "${SQ_MOUNT:-}" 2>/dev/null || true
+    umount "${ISO_MOUNT}" 2>/dev/null || true
+    rm -rf  "${ISO_MOUNT}" 2>/dev/null || true
+    exit "${_rc}"
+}
+trap '_cleanup' EXIT
 
 echo ""
 echo "==> Verifying ISO content: ${ISO}"
@@ -83,7 +91,7 @@ check "installer/firstboot.service exists" test -f "${ISO_MOUNT}/installer/first
 echo ""
 echo "--- squashfs mount ---"
 SQ_MOUNT="$(mktemp -d)"
-trap 'umount "${SQ_MOUNT}" 2>/dev/null; rm -rf "${SQ_MOUNT}"; umount "${ISO_MOUNT}" 2>/dev/null; rm -rf "${ISO_MOUNT}"' EXIT
+trap '_cleanup' EXIT
 
 mount -t squashfs -o loop,ro \
     "${ISO_MOUNT}/live/filesystem.squashfs" "${SQ_MOUNT}" 2>/dev/null
@@ -160,3 +168,4 @@ echo "==> Verification summary: ${PASS} passed, ${FAIL} failed"
 if [[ ${FAIL} -gt 0 ]]; then
     exit 1
 fi
+exit 0
