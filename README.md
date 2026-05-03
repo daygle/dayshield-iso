@@ -32,8 +32,8 @@ from scratch on a Debian 13 build host.  Follow these phases in order.
 
 ```sh
 # Install all required build tools
-sudo apt-get update
-sudo apt-get install -y git curl mmdebstrap zstd systemd-container xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin dosfstools dracut util-linux parted rsync qemu-system-x86 ovmf
+apt-get update
+apt-get install -y git curl mmdebstrap zstd systemd-container xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin dosfstools dracut util-linux parted rsync qemu-system-x86 ovmf
 
 # Install Rust via rustup (do NOT install rustc/cargo/rustup from apt)
 curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain 1.88.0
@@ -245,7 +245,7 @@ http://<vm-ip>:3000
 Install on Debian/Ubuntu:
 
 ```sh
-sudo apt-get install \
+apt-get install \
     xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin \
     dosfstools dracut zstd parted rsync util-linux
 ```
@@ -363,7 +363,7 @@ qemu-system-x86_64 \
 ### UEFI boot
 
 ```sh
-# Install OVMF: sudo apt-get install ovmf
+# Install OVMF: apt-get install ovmf
 qemu-system-x86_64 \
     -m 1G \
     -bios /usr/share/OVMF/OVMF_CODE.fd \
@@ -418,10 +418,10 @@ available under `/usr/lib/dayshield-installer/`:
 
 ```sh
 # Auto-detect target disk
-sudo /usr/lib/dayshield-installer/install.sh
+/usr/lib/dayshield-installer/install.sh
 
 # Specify target disk explicitly
-sudo DAYSHIELD_TARGET_DISK=/dev/sda /usr/lib/dayshield-installer/install.sh
+DAYSHIELD_TARGET_DISK=/dev/sda /usr/lib/dayshield-installer/install.sh
 ```
 
 ### First boot (after install)
