@@ -72,7 +72,7 @@ echo "    build   : ${BUILD_DIR}"
 validate_installer_ui() {
     local dir="$1"
     local missing=0
-    for file in index.html app.js alpine.min.js httpd.conf systemd/installer-ui.service systemd/installer-ui-web.service; do
+    for file in index.html styles.css app.js alpine.min.js httpd.conf systemd/installer-ui.service systemd/installer-ui-web.service; do
         if [ ! -e "${dir}/${file}" ]; then
             echo "ERROR: missing installer UI asset: ${file}" >&2
             missing=1
