@@ -12,15 +12,219 @@ Takes the output of [dayshield-rootfs](https://github.com/daygle/dayshield-rootf
 
 1. [Requirements](#requirements)
 2. [Repository layout](#repository-layout)
-3. [Building the ISO](#building-the-iso)
-4. [Testing in QEMU](#testing-in-qemu)
-5. [Running the installer](#running-the-installer)
-6. [Integration with other repos](#integration-with-other-repos)
-7. [Design decisions](#design-decisions)
+3. [End-to-end build guide](#end-to-end-build-guide)
+4. [Building the ISO](#building-the-iso)
+5. [Testing in QEMU](#testing-in-qemu)
+6. [Running the installer](#running-the-installer)
+7. [Integration with other repos](#integration-with-other-repos)
+8. [Design decisions](#design-decisions)
 
 ---
 
-## Requirements
+## End-to-end build guide
+
+This section walks through building a fully functional DayShield installer ISO
+from scratch on a Debian 13 build host.  Follow these phases in order.
+
+---
+
+### Phase 1 — Prepare the build host
+
+```sh
+# Install all required build tools
+sudo apt-get update
+sudo apt-get install -y \
+    git curl cargo rustup \
+    mmdebstrap zstd systemd-container \
+    xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin \
+    dosfstools dracut util-linux parted rsync \
+    qemu-system-x86 ovmf
+```
+
+---
+
+### Phase 2 — Clone all repos
+
+```sh
+cd ~
+git clone https://github.com/<you>/dayshield-rootfs
+git clone https://github.com/<you>/dayshield-iso
+git clone https://github.com/<you>/dayshield-installer-ui
+git clone https://github.com/<you>/dayshield-core
+```
+
+Replace `<you>` with your GitHub username or organisation.
+
+---
+
+### Phase 3 — Build the dayshield-core binary
+
+The rootfs builder copies the compiled binary into the rootfs.  Without it a
+non-functional placeholder is installed and the `dayshield` service will fail
+at runtime.
+
+```sh
+cd ~/dayshield-core
+
+# Ensure Rust toolchain is up to date
+rustup update stable
+
+# Build release binary
+cargo build --release
+
+# Copy into dayshield-rootfs so the rootfs builder can find it
+cp target/release/dayshield-core ~/dayshield-rootfs/dayshield-core
+```
+
+---
+
+### Phase 4 — Fetch the Alpine.js bundle
+
+The installer UI is fully offline.  The Alpine.js bundle must be downloaded
+once before the ISO build — it is never fetched during the build itself.
+
+```sh
+curl -Lo ~/dayshield-installer-ui/installer-ui/alpine.min.js \
+  "https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"
+```
+
+---
+
+### Phase 5 — Build the root filesystem
+
+```sh
+cd ~/dayshield-rootfs
+make rootfs
+```
+
+This runs mmdebstrap, chroot-setup, installs dayshield-core, enables all
+services, hardens IPv4, and produces:
+
+```
+~/dayshield-rootfs/rootfs.tar.zst
+```
+
+> **Tip:** the binary must be at `~/dayshield-rootfs/dayshield-core` (Phase 3)
+> before this step, or a placeholder is used instead.
+
+#### Verify the rootfs (recommended)
+
+```sh
+mkdir -p /tmp/ds-verify
+tar -I zstd -xf rootfs.tar.zst -C /tmp/ds-verify
+make verify ROOTFS_DIR=/tmp/ds-verify
+rm -rf /tmp/ds-verify
+```
+
+All checks should exit `[PASS]`.  The script validates:
+- Required directories present
+- All systemd service units installed and enabled
+- `dayshield-core` binary installed and executable
+- IPv6 disabled (sysctl, module blacklist, `/etc/hosts`, nftables, unbound)
+- nftables, unbound, suricata, and crowdsec configs present
+
+---
+
+### Phase 6 — Build the ISO
+
+```sh
+cd ~/dayshield-iso
+
+make iso \
+    ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
+    INSTALLER_UI=../dayshield-installer-ui/installer-ui
+```
+
+This runs the full pipeline (extract → inject installer UI → squashfs →
+kernel → initrd → bootloader → assemble) and produces:
+
+```
+~/dayshield-iso/dayshield.iso
+```
+
+#### Verify the ISO (optional)
+
+```sh
+make verify ISO=dayshield.iso
+```
+
+---
+
+### Phase 7 — Boot the ISO in QEMU
+
+```sh
+# BIOS mode
+qemu-system-x86_64 \
+  -m 2048 -smp 2 \
+  -cdrom dayshield.iso \
+  -boot d \
+  -nographic
+
+# UEFI mode (OVMF path may vary)
+qemu-system-x86_64 \
+  -m 2048 -smp 2 \
+  -bios /usr/share/ovmf/OVMF.fd \
+  -cdrom dayshield.iso \
+  -boot d \
+  -nographic
+```
+
+Expected boot sequence: GRUB menu → kernel messages → systemd → installer
+launched on tty1.
+
+> **No boot splash** — Plymouth is not installed.  Plain kernel log is
+> intentional.  If you see a panic, check that the ISO label is `DAYSHIELD`
+> (`isoinfo -d -i dayshield.iso | grep 'Volume id'`).
+
+---
+
+### Phase 8 — Run the installer
+
+The installer web UI starts automatically.  It is bound to
+`127.0.0.1:8080` (localhost only) and is accessible from within the live
+environment on tty1 via `w3m` (text browser) or a graphical browser if one
+is installed.
+
+Installation steps:
+
+1. **Select disk** — choose target installation disk
+2. **Partition** — creates GPT layout: 512 MiB EFI + remaining root
+3. **Format** — FAT32 EFI, ext4 root
+4. **Install rootfs** — extracts the rootfs archive from the ISO to the target
+5. **Install bootloader** — GRUB BIOS + UEFI on the target disk
+6. **Configure** — hostname, root password, primary network interface
+7. **Finalize** — unmounts, syncs
+8. **Reboot**
+
+> The installer UI is only active when the system is booted from the ISO
+> (`installer` kernel parameter).  Both installer services carry
+> `ConditionKernelCommandLine=installer` and are silently skipped on the
+> installed system.
+
+---
+
+### Phase 9 — First boot validation
+
+After installation and reboot:
+
+```sh
+# Check core services
+systemctl status dayshield.service
+systemctl status unbound
+systemctl status nftables
+systemctl status suricata
+systemctl status crowdsec
+systemctl status ssh
+
+# The dayshield-core API listens on port 3000 (not 8080)
+# Access the management UI from your host browser:
+http://<vm-ip>:3000
+```
+
+> **Port note:** port `8080` is the installer UI (live ISO only).
+> The `dayshield-core` REST API and management UI run on port **3000**.
+
+---
 
 ### Build host packages
 
