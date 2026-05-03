@@ -1,4 +1,4 @@
-# DayShield ISO
+﻿# DayShield ISO
 
 Deterministic, reproducible hybrid BIOS+UEFI bootable installer ISO for the
 **DayShield Firewall OS**.
@@ -80,14 +80,16 @@ cp target/release/dayshield-core ~/dayshield-rootfs/dayshield-core
 
 ---
 
-### Phase 4 - Fetch the Alpine.js bundle
+### Phase 4 - Fetch offline UI bundles
 
-The installer UI is fully offline.  The Alpine.js bundle must be downloaded
-once before the ISO build - it is never fetched during the build itself.
+The installer UI is fully offline. Both Alpine and Tailwind runtime bundles must exist before the ISO build. They are never fetched during the build itself.
 
 ```sh
 curl -Lo ~/dayshield-installer-ui/installer-ui/alpine.min.js \
   "https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"
+
+curl -Lo ~/dayshield-installer-ui/installer-ui/tailwind.min.js \
+  "https://cdn.tailwindcss.com"
 ```
 
 ---
@@ -137,8 +139,8 @@ make iso \
     INSTALLER_UI=../dayshield-installer-ui/installer-ui
 ```
 
-This runs the full pipeline (extract → inject installer UI → squashfs →
-kernel → initrd → bootloader → assemble) and produces:
+This runs the full pipeline (extract â†’ inject installer UI â†’ squashfs â†’
+kernel â†’ initrd â†’ bootloader â†’ assemble) and produces:
 
 ```
 ~/dayshield-iso/dayshield.iso
@@ -179,7 +181,7 @@ qemu-system-x86_64 \
   -nographic
 ```
 
-Expected boot sequence: GRUB menu → kernel messages → systemd → installer
+Expected boot sequence: GRUB menu â†’ kernel messages â†’ systemd â†’ installer
 launched on tty1.
 
 > **Live session login** - username `root`, password `dayshield`.  This
@@ -273,29 +275,29 @@ apt-get install \
 
 ```
 dayshield-iso/
-├── scripts/
-│   ├── build-iso.sh              # Main entrypoint
-│   ├── extract-rootfs.sh         # Extract rootfs.tar.zst → build/rootfs/
-│   ├── inject-installer-ui.sh    # Inject web installer UI into live rootfs
-│   ├── build-squashfs.sh         # Build deterministic squashfs image
-│   ├── build-kernel.sh           # Locate/extract vmlinuz + initrd
-│   ├── build-initrd.sh           # Build installer initrd (dracut/mkinitramfs)
-│   ├── build-bootloader.sh       # Build hybrid BIOS+UEFI GRUB images
-│   ├── assemble-iso.sh           # Assemble final ISO with xorriso
-│   ├── cleanup.sh                # Remove intermediate artefacts
-│   └── verify.sh                 # Content and boot verification
-├── config/
-│   ├── grub.cfg                  # GRUB boot menu
-│   ├── isolinux.cfg              # ISOLINUX/SYSLINUX fallback menu
-│   └── installer/
-│       ├── install.sh              # CLI installer orchestrator (fallback)
-│       ├── partition.sh            # GPT disk partitioning
-│       ├── copy-rootfs.sh          # squashfs → target filesystem copy
-│       ├── configure-bootloader.sh # Install GRUB on target disk
-│       ├── firstboot.service       # systemd unit for first-boot tasks
-│       └── firstboot-run.sh        # First-boot script (SSH keys, machine-id…)
-├── Makefile
-└── README.md
+â”œâ”€â”€ scripts/
+â”‚   â”œâ”€â”€ build-iso.sh              # Main entrypoint
+â”‚   â”œâ”€â”€ extract-rootfs.sh         # Extract rootfs.tar.zst â†’ build/rootfs/
+â”‚   â”œâ”€â”€ inject-installer-ui.sh    # Inject web installer UI into live rootfs
+â”‚   â”œâ”€â”€ build-squashfs.sh         # Build deterministic squashfs image
+â”‚   â”œâ”€â”€ build-kernel.sh           # Locate/extract vmlinuz + initrd
+â”‚   â”œâ”€â”€ build-initrd.sh           # Build installer initrd (dracut/mkinitramfs)
+â”‚   â”œâ”€â”€ build-bootloader.sh       # Build hybrid BIOS+UEFI GRUB images
+â”‚   â”œâ”€â”€ assemble-iso.sh           # Assemble final ISO with xorriso
+â”‚   â”œâ”€â”€ cleanup.sh                # Remove intermediate artefacts
+â”‚   â””â”€â”€ verify.sh                 # Content and boot verification
+â”œâ”€â”€ config/
+â”‚   â”œâ”€â”€ grub.cfg                  # GRUB boot menu
+â”‚   â”œâ”€â”€ isolinux.cfg              # ISOLINUX/SYSLINUX fallback menu
+â”‚   â””â”€â”€ installer/
+â”‚       â”œâ”€â”€ install.sh              # CLI installer orchestrator (fallback)
+â”‚       â”œâ”€â”€ partition.sh            # GPT disk partitioning
+â”‚       â”œâ”€â”€ copy-rootfs.sh          # squashfs â†’ target filesystem copy
+â”‚       â”œâ”€â”€ configure-bootloader.sh # Install GRUB on target disk
+â”‚       â”œâ”€â”€ firstboot.service       # systemd unit for first-boot tasks
+â”‚       â””â”€â”€ firstboot-run.sh        # First-boot script (SSH keys, machine-idâ€¦)
+â”œâ”€â”€ Makefile
+â””â”€â”€ README.md
 ```
 
 ---
@@ -508,3 +510,4 @@ npx tailwindcss -i styles.css -o dist/styles.css \
 | No IPv6 | `ipv6.disable=1` kernel parameter + dracut `omit_dracutmodules+=" ipv6 "` |
 | GPT partitioning | Required for UEFI; also supported by modern BIOS-boot GRUB |
 | ext4 root filesystem | Best compatibility with the Debian-based rootfs |
+
