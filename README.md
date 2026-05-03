@@ -174,6 +174,11 @@ qemu-system-x86_64 \
 Expected boot sequence: GRUB menu → kernel messages → systemd → installer
 launched on tty1.
 
+> **Live session login** — username `root`, password `dayshield`.  This
+> default is set only for the live/installer environment and is not carried
+> forward to the installed system.  The installer's configure step sets the
+> real root password before first boot.
+
 > **No boot splash** — Plymouth is not installed.  Plain kernel log is
 > intentional.  If you see a panic, check that the ISO label is `DAYSHIELD`
 > (`isoinfo -d -i dayshield.iso | grep 'Volume id'`).
