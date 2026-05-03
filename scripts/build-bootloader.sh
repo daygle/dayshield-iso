@@ -79,34 +79,35 @@ fi
 # ---------------------------------------------------------------------------
 echo "--> Building GRUB UEFI image …"
 
-if [[ -n "${GRUB_X64_LIB}" ]]; then
-    GRUBX64_EFI="${EFI_DIR}/BOOTX64.EFI"
+if [[ -z "${GRUB_X64_LIB}" ]]; then
+    echo "ERROR: grub-x86_64-efi modules not found. Install grub-efi-amd64-bin." >&2
+    exit 1
+fi
 
-    # Embed a tiny search script so GRUB can locate the ISO by label at UEFI
-    # boot time.  Without this, (cd) is not a valid device alias in EFI mode
-    # and GRUB drops straight to a shell.
-    GRUB_EMBEDDED_CFG="${BUILD_DIR}/grub-embedded.cfg"
-    cat > "${GRUB_EMBEDDED_CFG}" <<'EMBEDDED_EOF'
+GRUBX64_EFI="${EFI_DIR}/BOOTX64.EFI"
+
+# grub-mkstandalone produces a single self-contained EFI PE32+ binary with all
+# modules and the embedded config baked in.  This is what Debian/Ubuntu use and
+# is the most portable approach for OVMF / Proxmox UEFI boot.
+GRUB_EMBEDDED_CFG="${BUILD_DIR}/grub-embedded.cfg"
+cat > "${GRUB_EMBEDDED_CFG}" <<'EMBEDDED_EOF'
 search --no-floppy --label --set=root DAYSHIELD
 set prefix=($root)/boot/grub
 configfile /boot/grub/grub.cfg
 EMBEDDED_EOF
 
-    grub-mkimage \
-        --directory="${GRUB_X64_LIB}" \
-        --prefix="/boot/grub" \
-        --config="${GRUB_EMBEDDED_CFG}" \
-        --output="${GRUBX64_EFI}" \
-        --format="x86_64-efi" \
-        --compression="auto" \
-        iso9660 normal search search_fs_file search_label configfile \
-        linux echo all_video gzio part_gpt part_msdos ext2 fat efifwsetup
+grub-mkstandalone \
+    --directory="${GRUB_X64_LIB}" \
+    --format="x86_64-efi" \
+    --output="${GRUBX64_EFI}" \
+    "boot/grub/grub.cfg=${GRUB_EMBEDDED_CFG}"
 
-    echo "    GRUB EFI binary: $(du -sh "${GRUBX64_EFI}" | cut -f1)"
-else
-    echo "WARNING: grub-x86_64-efi modules not found; UEFI boot may not work." >&2
-    touch "${EFI_DIR}/BOOTX64.EFI"
+if [[ ! -s "${GRUBX64_EFI}" ]]; then
+    echo "ERROR: grub-mkstandalone produced an empty BOOTX64.EFI" >&2
+    exit 1
 fi
+
+echo "    GRUB EFI binary: $(du -sh "${GRUBX64_EFI}" | cut -f1)"
 
 # Build the FAT EFI System Partition image (efiboot.img)
 EFI_IMG="${BOOT_DIR}/EFI/efiboot.img"
