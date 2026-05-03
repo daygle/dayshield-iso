@@ -130,7 +130,7 @@ if [[ -f "${EFI_PART_IMG}" ]]; then
     cp "${EFI_PART_IMG}" "${ISO_ROOT}/EFI/efiboot.img"
     XORRISO_EXTRA_ARGS+=(
         -eltorito-alt-boot
-        -e          "--interval:appended_partition_2:::"
+        -e          "EFI/efiboot.img"
         -no-emul-boot
         -append_partition 2 0xef "${EFI_PART_IMG}"
         -appended_part_as_gpt
