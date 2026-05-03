@@ -123,7 +123,7 @@ if command -v xorriso &>/dev/null; then
         true
     fi
     if check "El Torito report contains UEFI boot image" \
-           grep -Eq 'efiboot\.img|appended_partition_2' "${ELTORITO_TMP}"; then
+           grep -Eq 'El Torito boot img.*UEFI|efiboot\.img|appended_partition_2' "${ELTORITO_TMP}"; then
         true
     fi
     if [[ ${FAIL} -gt 0 ]]; then
