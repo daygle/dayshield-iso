@@ -111,7 +111,22 @@ check "grub.cfg contains 'initrd'"      grep -q 'initrd\b' "${ISO_MOUNT}/boot/gr
 check "grub.cfg contains 'filesystem'"  grep -q 'filesystem' "${ISO_MOUNT}/boot/grub/grub.cfg"
 
 # ---------------------------------------------------------------------------
-# 4. initrd is non-empty
+# 4. El Torito / boot metadata
+# ---------------------------------------------------------------------------
+echo ""
+echo "--- Boot metadata ---"
+if command -v xorriso &>/dev/null; then
+    ELTORITO_REPORT="$(xorriso -indev "${ISO}" -report_el_torito plain 2>/dev/null || true)"
+    check "El Torito report contains BIOS boot image" \
+        bash -c 'grep -Eq "El Torito boot img[[:space:]]*:.*boot/grub/bios\.img|El Torito img path[[:space:]]*: /boot/grub/bios\.img" <<<"${ELTORITO_REPORT}"'
+    check "El Torito report contains UEFI boot image" \
+        bash -c 'grep -Eq "El Torito boot img[[:space:]]*:.*EFI/efiboot\.img|El Torito img path[[:space:]]*: /EFI/efiboot\.img" <<<"${ELTORITO_REPORT}"'
+else
+    echo "  [SKIP] xorriso not found; skipping El Torito metadata checks"
+fi
+
+# ---------------------------------------------------------------------------
+# 5. initrd is non-empty
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- initrd ---"
@@ -119,7 +134,7 @@ INITRD_SIZE="$(stat -c%s "${ISO_MOUNT}/boot/initrd.img")"
 check "initrd.img is non-empty (size=${INITRD_SIZE})"  test "${INITRD_SIZE}" -gt 0
 
 # ---------------------------------------------------------------------------
-# 5. QEMU boot tests (optional, require root and QEMU)
+# 6. QEMU boot tests (optional, require root and QEMU)
 # ---------------------------------------------------------------------------
 if ${QEMU_TEST}; then
     echo ""

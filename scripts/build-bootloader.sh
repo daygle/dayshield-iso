@@ -48,24 +48,16 @@ cp "${CONFIG_DIR}/grub.cfg" "${GRUB_BIOS_DIR}/grub.cfg"
 echo "--> Building GRUB BIOS image …"
 
 if [[ -n "${GRUB_I386_LIB}" ]]; then
-    # Generate core.img
+    # Generate a proper El Torito BIOS boot image for CD boot.
     grub-mkimage \
         --directory="${GRUB_I386_LIB}" \
         --prefix="(cd)/boot/grub" \
-        --output="${GRUB_BIOS_DIR}/core.img" \
-        --format="i386-pc" \
+        --output="${GRUB_BIOS_DIR}/bios.img" \
+        --format="i386-pc-eltorito" \
         --compression="auto" \
         biosdisk iso9660 normal search search_fs_file \
         search_label configfile linux echo all_video gzio part_gpt \
         part_msdos ext2 fat
-
-    # Concatenate cdboot.img + core.img → bios.img (El Torito boot image)
-    if [[ -f "${GRUB_I386_LIB}/cdboot.img" ]]; then
-        cat "${GRUB_I386_LIB}/cdboot.img" "${GRUB_BIOS_DIR}/core.img" \
-            > "${GRUB_BIOS_DIR}/bios.img"
-    else
-        cp "${GRUB_BIOS_DIR}/core.img" "${GRUB_BIOS_DIR}/bios.img"
-    fi
 
     # Copy the hybrid MBR boot sector used by xorriso --grub2-mbr
     if [[ -f "${GRUB_I386_LIB}/boot_hybrid.img" ]]; then
