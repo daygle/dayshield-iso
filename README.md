@@ -33,12 +33,7 @@ from scratch on a Debian 13 build host.  Follow these phases in order.
 ```sh
 # Install all required build tools
 sudo apt-get update
-sudo apt-get install -y \
-    git curl cargo rustup \
-    mmdebstrap zstd systemd-container \
-    xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin \
-    dosfstools dracut util-linux parted rsync \
-    qemu-system-x86 ovmf
+sudo apt-get install -y git curl cargo rustup mmdebstrap zstd systemd-container xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin dosfstools dracut util-linux parted rsync qemu-system-x86 ovmf
 ```
 
 ---
