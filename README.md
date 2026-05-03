@@ -157,18 +157,20 @@ make verify ISO=dayshield.iso
 ```sh
 # BIOS mode
 qemu-system-x86_64 \
-  -m 2048 -smp 2 \
-  -cdrom dayshield.iso \
-  -boot d \
-  -nographic
+    -m 2048 -smp 2 \
+    -cpu host \
+    -cdrom dayshield.iso \
+    -boot d \
+    -nographic
 
 # UEFI mode (OVMF path may vary)
 qemu-system-x86_64 \
-  -m 2048 -smp 2 \
-  -bios /usr/share/ovmf/OVMF.fd \
-  -cdrom dayshield.iso \
-  -boot d \
-  -nographic
+    -m 2048 -smp 2 \
+    -cpu host \
+    -bios /usr/share/ovmf/OVMF.fd \
+    -cdrom dayshield.iso \
+    -boot d \
+    -nographic
 ```
 
 Expected boot sequence: GRUB menu → kernel messages → systemd → installer
@@ -360,6 +362,7 @@ The build pipeline enforces deterministic output:
 ```sh
 qemu-system-x86_64 \
     -m 1G \
+    -cpu host \
     -cdrom dayshield.iso \
     -boot d \
     -nographic
@@ -371,6 +374,7 @@ qemu-system-x86_64 \
 # Install OVMF: apt-get install ovmf
 qemu-system-x86_64 \
     -m 1G \
+    -cpu host \
     -bios /usr/share/OVMF/OVMF_CODE.fd \
     -cdrom dayshield.iso \
     -boot d \
