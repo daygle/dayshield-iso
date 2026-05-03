@@ -91,7 +91,8 @@ check "installer/firstboot.service exists" test -f "${ISO_MOUNT}/installer/first
 check "installer/rootfs.tar.zst exists"      test -f "${ISO_MOUNT}/installer/rootfs.tar.zst"
 check "installer-ui/index.html exists"      test -f "${ISO_MOUNT}/installer-ui/index.html"
 check "installer-ui/app.js exists"          test -f "${ISO_MOUNT}/installer-ui/app.js"
-check "installer-ui/alpine.min.js exists"   test -f "${ISO_MOUNT}/installer-ui/alpine.min.js"
+check "installer-ui/alpine.min.js exists"    test -f "${ISO_MOUNT}/installer-ui/alpine.min.js"
+check "installer-ui/tailwind.min.js exists"  test -f "${ISO_MOUNT}/installer-ui/tailwind.min.js"
 check "installer-ui/httpd.conf exists"      test -f "${ISO_MOUNT}/installer-ui/httpd.conf"
 
 # ---------------------------------------------------------------------------
