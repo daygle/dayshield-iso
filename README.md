@@ -1,4 +1,4 @@
-# dayshield-iso
+# DayShield ISO
 
 Deterministic, reproducible hybrid BIOS+UEFI bootable installer ISO for the
 **DayShield Firewall OS**.
