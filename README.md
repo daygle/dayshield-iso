@@ -28,7 +28,7 @@ from scratch on a Debian 13 build host.  Follow these phases in order.
 
 ---
 
-### Phase 1 — Prepare the build host
+### Phase 1 - Prepare the build host
 
 ```sh
 # Install all required build tools
@@ -42,7 +42,7 @@ source "$HOME/.cargo/env"
 
 ---
 
-### Phase 2 — Clone all repos
+### Phase 2 - Clone all repos
 
 ```sh
 cd ~
@@ -54,7 +54,7 @@ git clone https://github.com/daygle/dayshield-core
 
 ---
 
-### Phase 3 — Build the dayshield-core binary
+### Phase 3 - Build the dayshield-core binary
 
 The rootfs builder copies the compiled binary into the rootfs.  Without it a
 non-functional placeholder is installed and the `dayshield` service will fail
@@ -80,10 +80,10 @@ cp target/release/dayshield-core ~/dayshield-rootfs/dayshield-core
 
 ---
 
-### Phase 4 — Fetch the Alpine.js bundle
+### Phase 4 - Fetch the Alpine.js bundle
 
 The installer UI is fully offline.  The Alpine.js bundle must be downloaded
-once before the ISO build — it is never fetched during the build itself.
+once before the ISO build - it is never fetched during the build itself.
 
 ```sh
 curl -Lo ~/dayshield-installer-ui/installer-ui/alpine.min.js \
@@ -92,7 +92,7 @@ curl -Lo ~/dayshield-installer-ui/installer-ui/alpine.min.js \
 
 ---
 
-### Phase 5 — Build the root filesystem
+### Phase 5 - Build the root filesystem
 
 ```sh
 cd ~/dayshield-rootfs
@@ -127,7 +127,7 @@ All checks should exit `[PASS]`.  The script validates:
 
 ---
 
-### Phase 6 — Build the ISO
+### Phase 6 - Build the ISO
 
 ```sh
 cd ~/dayshield-iso
@@ -152,7 +152,7 @@ make verify ISO=dayshield.iso
 
 ---
 
-### Phase 7 — Boot the ISO in QEMU
+### Phase 7 - Boot the ISO in QEMU
 
 ```sh
 # BIOS mode
@@ -174,18 +174,18 @@ qemu-system-x86_64 \
 Expected boot sequence: GRUB menu → kernel messages → systemd → installer
 launched on tty1.
 
-> **Live session login** — username `root`, password `dayshield`.  This
+> **Live session login** - username `root`, password `dayshield`.  This
 > default is set only for the live/installer environment and is not carried
 > forward to the installed system.  The installer's configure step sets the
 > real root password before first boot.
 
-> **No boot splash** — Plymouth is not installed.  Plain kernel log is
+> **No boot splash** - Plymouth is not installed.  Plain kernel log is
 > intentional.  If you see a panic, check that the ISO label is `DAYSHIELD`
 > (`isoinfo -d -i dayshield.iso | grep 'Volume id'`).
 
 ---
 
-### Phase 8 — Run the installer
+### Phase 8 - Run the installer
 
 The installer web UI starts automatically.  It is bound to
 `127.0.0.1:8080` (localhost only) and is accessible from within the live
@@ -194,13 +194,13 @@ is installed.
 
 Installation steps:
 
-1. **Select disk** — choose target installation disk
-2. **Partition** — creates GPT layout: 512 MiB EFI + remaining root
-3. **Format** — FAT32 EFI, ext4 root
-4. **Install rootfs** — extracts the rootfs archive from the ISO to the target
-5. **Install bootloader** — GRUB BIOS + UEFI on the target disk
-6. **Configure** — hostname, root password, primary network interface
-7. **Finalize** — unmounts, syncs
+1. **Select disk** - choose target installation disk
+2. **Partition** - creates GPT layout: 512 MiB EFI + remaining root
+3. **Format** - FAT32 EFI, ext4 root
+4. **Install rootfs** - extracts the rootfs archive from the ISO to the target
+5. **Install bootloader** - GRUB BIOS + UEFI on the target disk
+6. **Configure** - hostname, root password, primary network interface
+7. **Finalize** - unmounts, syncs
 8. **Reboot**
 
 > The installer UI is only active when the system is booted from the ISO
@@ -210,7 +210,7 @@ Installation steps:
 
 ---
 
-### Phase 9 — First boot validation
+### Phase 9 - First boot validation
 
 After installation and reboot:
 
@@ -238,10 +238,10 @@ http://<vm-ip>:3000
 | Package | Purpose |
 |---------|---------|
 | `xorriso` | ISO creation (mkisofs-compatible with hybrid MBR+GPT support) |
-| `squashfs-tools` | `mksquashfs` — creates the live squashfs image |
+| `squashfs-tools` | `mksquashfs` - creates the live squashfs image |
 | `grub-pc-bin` | GRUB BIOS modules (`i386-pc`) |
 | `grub-efi-amd64-bin` | GRUB UEFI modules (`x86_64-efi`) |
-| `dosfstools` | `mkfs.fat` — formats the EFI System Partition image |
+| `dosfstools` | `mkfs.fat` - formats the EFI System Partition image |
 | `dracut` or `initramfs-tools` | initrd generation |
 | `zstd` | zstd decompression for rootfs extraction |
 | `parted` | disk partitioning (used by installer) |
@@ -313,7 +313,7 @@ make iso \
 
 The built ISO is written to `dayshield.iso` (or the path given via `OUTPUT=`).
 
-`INSTALLER_UI` is optional but strongly recommended — without it the web-based
+`INSTALLER_UI` is optional but strongly recommended - without it the web-based
 installer UI will not be present in the live environment.
 
 ### Manual invocation
@@ -398,22 +398,22 @@ Boot the ISO in a VM or on bare metal.  When the `installer` kernel parameter
 is present (the default in all boot menu entries), the live environment
 automatically starts the **web-based installer UI** on `tty1`:
 
-- `installer-ui-web.service` — serves the installer on `http://127.0.0.1:8080`
-- `installer-ui.service` — opens a browser on `tty1` pointing at the above URL
+- `installer-ui-web.service` - serves the installer on `http://127.0.0.1:8080`
+- `installer-ui.service` - opens a browser on `tty1` pointing at the above URL
 
 If a graphical browser (`surf`, `midori`) is unavailable, `w3m` is used as a
 text-browser fallback.  The URL is always `http://127.0.0.1:8080/`.
 
 ### Web UI installation flow
 
-1. **Welcome** — brief overview
-2. **Disk selection** — lists available disks via `/api/detect-disks.sh`
-3. **Partition** — creates GPT layout: 512 MiB EFI + remaining root
-4. **Format** — FAT32 EFI + ext4 root
-5. **Install rootfs** — extracts `rootfs.tar.zst` from the ISO to the target
-6. **Install bootloader** — installs GRUB (BIOS + UEFI) on the target disk
-7. **Configure** — hostname, root password, primary network interface
-8. **Finalize** — unmounts, syncs, removes installer artefacts
+1. **Welcome** - brief overview
+2. **Disk selection** - lists available disks via `/api/detect-disks.sh`
+3. **Partition** - creates GPT layout: 512 MiB EFI + remaining root
+4. **Format** - FAT32 EFI + ext4 root
+5. **Install rootfs** - extracts `rootfs.tar.zst` from the ISO to the target
+6. **Install bootloader** - installs GRUB (BIOS + UEFI) on the target disk
+7. **Configure** - hostname, root password, primary network interface
+8. **Finalize** - unmounts, syncs, removes installer artefacts
 9. **Reboot**
 
 ### CLI fallback (no web UI)
