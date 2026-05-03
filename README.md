@@ -47,13 +47,11 @@ sudo apt-get install -y \
 
 ```sh
 cd ~
-git clone https://github.com/<you>/dayshield-rootfs
-git clone https://github.com/<you>/dayshield-iso
-git clone https://github.com/<you>/dayshield-installer-ui
-git clone https://github.com/<you>/dayshield-core
+git clone https://github.com/daygle/dayshield-rootfs
+git clone https://github.com/daygle/dayshield-iso
+git clone https://github.com/daygle/dayshield-installer-ui
+git clone https://github.com/daygle/dayshield-core
 ```
-
-Replace `<you>` with your GitHub username or organisation.
 
 ---
 
