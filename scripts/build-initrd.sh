@@ -22,13 +22,16 @@ INSTALLER_SRC="${CONFIG_DIR}/installer"
 # ---------------------------------------------------------------------------
 # Determine kernel version
 # ---------------------------------------------------------------------------
-KVER="$(strings "${KERNEL_DIR}/vmlinuz" 2>/dev/null \
-        | grep -oP '\d+\.\d+\.\d+-\d+-[a-z0-9]+' \
-        | head -n1 || true)"
+# Prefer the modules directory name — it is the exact string the kernel and
+# dracut need, and avoids regex mis-truncation (e.g. 6.1.0-42-rt-amd64 vs
+# 6.1.0-42-rt).
+KVER="$(ls "${ROOTFS_DIR}/lib/modules/" 2>/dev/null | sort -V | tail -n1 || true)"
 
 if [[ -z "${KVER}" ]]; then
-    # Fallback: look for modules directory in rootfs
-    KVER="$(ls "${ROOTFS_DIR}/lib/modules/" 2>/dev/null | sort -V | tail -n1 || true)"
+    # Fallback: extract from the kernel binary
+    KVER="$(strings "${KERNEL_DIR}/vmlinuz" 2>/dev/null \
+            | grep -oP '\d+\.\d+\.\d+-\S+' \
+            | head -n1 || true)"
 fi
 
 KERNEL_VERSION="${KVER}"
@@ -64,8 +67,14 @@ compress="zstd"
 EOF
 
     KVER_ARG=""
+    KMODDIR_ARG=""
     if [[ -n "${KERNEL_VERSION}" ]]; then
         KVER_ARG="--kver ${KERNEL_VERSION}"
+        # Point dracut at the rootfs modules — the build host won't have them
+        MODULES_DIR="${ROOTFS_DIR}/lib/modules/${KERNEL_VERSION}"
+        if [[ -d "${MODULES_DIR}" ]]; then
+            KMODDIR_ARG="--kmoddir ${MODULES_DIR}"
+        fi
     fi
 
     dracut \
@@ -74,6 +83,7 @@ EOF
         --no-hostonly \
         --add "dmsquash-live" \
         ${KVER_ARG} \
+        ${KMODDIR_ARG} \
         "${KERNEL_DIR}/initrd.img"
 
     rm -f "${DRACUT_CONF}"
