@@ -51,10 +51,18 @@ if [[ -d "${INSTALLER_SRC}" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Try dracut first
+# Try dracut first (requires dracut-live package for dmsquash-live module)
 # ---------------------------------------------------------------------------
-if command -v dracut &>/dev/null; then
-    echo "--> Using dracut …"
+DRACUT_LIVE_MODULE=""
+for _dir in /usr/lib/dracut/modules.d /lib/dracut/modules.d; do
+    if [[ -d "${_dir}/90dmsquash-live" ]]; then
+        DRACUT_LIVE_MODULE="${_dir}/90dmsquash-live"
+        break
+    fi
+done
+
+if command -v dracut &>/dev/null && [[ -n "${DRACUT_LIVE_MODULE}" ]]; then
+    echo "--> Using dracut (dmsquash-live: ${DRACUT_LIVE_MODULE}) …"
 
     DRACUT_CONF="$(mktemp --suffix=.conf)"
     cat > "${DRACUT_CONF}" <<'EOF'

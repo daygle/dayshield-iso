@@ -33,7 +33,7 @@ from scratch on a Debian 13 build host.  Follow these phases in order.
 ```sh
 # Install all required build tools
 apt-get update
-apt-get install -y git curl gcc make build-essential mmdebstrap zstd systemd-container xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin dosfstools dracut util-linux parted rsync qemu-system-x86 ovmf
+apt-get install -y git curl gcc make build-essential mmdebstrap zstd systemd-container xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin dosfstools dracut dracut-live util-linux parted rsync qemu-system-x86 ovmf
 
 # Install Rust via rustup (do NOT install rustc/cargo/rustup from apt)
 curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain 1.88.0
