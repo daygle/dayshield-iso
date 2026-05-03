@@ -16,10 +16,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${CONFIG_DIR:="${SCRIPT_DIR}/../config"}"
 
 OUTPUT=""
+ROOTFS_ARCHIVE=""
+INSTALLER_UI_DIR=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --output) OUTPUT="$2"; shift 2 ;;
+        --output)        OUTPUT="$2"; shift 2 ;;
+        --rootfs)        ROOTFS_ARCHIVE="$2"; shift 2 ;;
+        --installer-ui)  INSTALLER_UI_DIR="$2"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 1 ;;
     esac
 done
@@ -92,6 +96,19 @@ done
 # Installer scripts
 if [[ -d "${INSTALLER_SRC}" ]]; then
     cp -r "${INSTALLER_SRC}/." "${ISO_ROOT}/installer/"
+fi
+
+# Place rootfs archive on ISO so the web installer can find it without RAM copy
+if [[ -n "${ROOTFS_ARCHIVE}" ]] && [[ -f "${ROOTFS_ARCHIVE}" ]]; then
+    echo "--> Embedding rootfs archive at /installer/rootfs.tar.zst …"
+    cp "${ROOTFS_ARCHIVE}" "${ISO_ROOT}/installer/rootfs.tar.zst"
+fi
+
+# Place installer web UI files on ISO (served by installer-ui-web.service)
+if [[ -n "${INSTALLER_UI_DIR}" ]] && [[ -d "${INSTALLER_UI_DIR}" ]]; then
+    echo "--> Embedding installer web UI at /installer-ui/ …"
+    mkdir -p "${ISO_ROOT}/installer-ui"
+    cp -r "${INSTALLER_UI_DIR}/." "${ISO_ROOT}/installer-ui/"
 fi
 
 # Normalise all timestamps to epoch 0

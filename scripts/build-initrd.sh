@@ -106,6 +106,10 @@ HOOK
 
     chmod 755 "${ROOTFS_DIR}/etc/initramfs-tools/hooks/dayshield-installer"
 
+    # Activate live-boot mode so the initrd can pivot to the squashfs root
+    mkdir -p "${ROOTFS_DIR}/etc/initramfs-tools/conf.d"
+    echo 'BOOT=live' > "${ROOTFS_DIR}/etc/initramfs-tools/conf.d/live.conf"
+
     # Run mkinitramfs inside the rootfs so it sees the correct modules + payload
     chroot "${ROOTFS_DIR}" mkinitramfs -o /tmp/initrd.img "${KERNEL_VERSION}"
 
@@ -113,6 +117,7 @@ HOOK
     cp "${ROOTFS_DIR}/tmp/initrd.img" "${KERNEL_DIR}/initrd.img"
     rm -f "${ROOTFS_DIR}/tmp/initrd.img"
     rm -f "${ROOTFS_DIR}/etc/initramfs-tools/hooks/dayshield-installer"
+    rm -f "${ROOTFS_DIR}/etc/initramfs-tools/conf.d/live.conf"
 
 else
     echo "WARNING: Neither dracut nor mkinitramfs found." >&2

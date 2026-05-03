@@ -14,6 +14,7 @@ set -euo pipefail
 ROOTFS=""
 OUTPUT="dayshield.iso"
 ARCH="amd64"
+INSTALLER_UI_DIR=""
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -30,6 +31,8 @@ while [[ $# -gt 0 ]]; do
             OUTPUT="$2"; shift 2 ;;
         --arch)
             ARCH="$2"; shift 2 ;;
+        --installer-ui)
+            INSTALLER_UI_DIR="$2"; shift 2 ;;
         --help|-h)
             grep '^#' "$0" | sed 's/^# \?//'
             exit 0 ;;
@@ -64,6 +67,7 @@ echo "    rootfs  : ${ROOTFS}"
 echo "    output  : ${OUTPUT}"
 echo "    arch    : ${ARCH}"
 echo "    build   : ${BUILD_DIR}"
+[[ -n "${INSTALLER_UI_DIR}" ]] && echo "    installer-ui: ${INSTALLER_UI_DIR}"
 
 # ---------------------------------------------------------------------------
 # Helper: run a sub-script with consistent environment
@@ -81,11 +85,20 @@ run_step() {
 # Pipeline
 # ---------------------------------------------------------------------------
 run_step extract-rootfs.sh  --rootfs "${ROOTFS}"
+
+# Inject installer UI files into the live rootfs before squashfs is built
+if [[ -n "${INSTALLER_UI_DIR}" ]]; then
+    run_step inject-installer-ui.sh --installer-ui "${INSTALLER_UI_DIR}"
+fi
+
 run_step build-squashfs.sh
 run_step build-kernel.sh
 run_step build-initrd.sh
 run_step build-bootloader.sh
-run_step assemble-iso.sh    --output "${OUTPUT}"
+ASSEMBLE_ARGS=(--output "${OUTPUT}")
+[[ -n "${INSTALLER_UI_DIR}" ]] && ASSEMBLE_ARGS+=(--installer-ui "${INSTALLER_UI_DIR}")
+ASSEMBLE_ARGS+=(--rootfs "${ROOTFS}")
+run_step assemble-iso.sh "${ASSEMBLE_ARGS[@]}"
 
 # ---------------------------------------------------------------------------
 # Cleanup

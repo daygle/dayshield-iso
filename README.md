@@ -15,7 +15,7 @@ Takes the output of [dayshield-rootfs](https://github.com/daygle/dayshield-rootf
 3. [Building the ISO](#building-the-iso)
 4. [Testing in QEMU](#testing-in-qemu)
 5. [Running the installer](#running-the-installer)
-6. [Integration with rootfs builder](#integration-with-rootfs-builder)
+6. [Integration with other repos](#integration-with-other-repos)
 7. [Design decisions](#design-decisions)
 
 ---
@@ -41,8 +41,13 @@ Install on Debian/Ubuntu:
 ```sh
 sudo apt-get install \
     xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin \
-    dosfstools dracut zstd parted rsync
+    dosfstools dracut zstd parted rsync util-linux
 ```
+
+> **Note:** `live-boot`, `live-config`, and `squashfs-tools` are included
+> inside the rootfs itself (via `dayshield-rootfs/config/packages.txt`) so
+> the live initrd can mount the squashfs root.  They do not need to be
+> installed on the build host.
 
 ---
 
@@ -51,21 +56,22 @@ sudo apt-get install \
 ```
 dayshield-iso/
 ├── scripts/
-│   ├── build-iso.sh          # Main entrypoint
-│   ├── extract-rootfs.sh     # Extract rootfs.tar.zst → build/rootfs/
-│   ├── build-squashfs.sh     # Build deterministic squashfs image
-│   ├── build-kernel.sh       # Locate/extract vmlinuz + initrd
-│   ├── build-initrd.sh       # Build installer initrd (dracut/mkinitramfs)
-│   ├── build-bootloader.sh   # Build hybrid BIOS+UEFI GRUB images
-│   ├── assemble-iso.sh       # Assemble final ISO with xorriso
-│   ├── cleanup.sh            # Remove intermediate artefacts
-│   └── verify.sh             # Content and boot verification
+│   ├── build-iso.sh              # Main entrypoint
+│   ├── extract-rootfs.sh         # Extract rootfs.tar.zst → build/rootfs/
+│   ├── inject-installer-ui.sh    # Inject web installer UI into live rootfs
+│   ├── build-squashfs.sh         # Build deterministic squashfs image
+│   ├── build-kernel.sh           # Locate/extract vmlinuz + initrd
+│   ├── build-initrd.sh           # Build installer initrd (dracut/mkinitramfs)
+│   ├── build-bootloader.sh       # Build hybrid BIOS+UEFI GRUB images
+│   ├── assemble-iso.sh           # Assemble final ISO with xorriso
+│   ├── cleanup.sh                # Remove intermediate artefacts
+│   └── verify.sh                 # Content and boot verification
 ├── config/
-│   ├── grub.cfg              # GRUB boot menu
-│   ├── isolinux.cfg          # ISOLINUX/SYSLINUX fallback menu
-│   ├── splash.png            # Optional boot splash (place here)
+│   ├── grub.cfg                  # GRUB boot menu
+│   ├── isolinux.cfg              # ISOLINUX/SYSLINUX fallback menu
+│   ├── splash.png                # Optional boot splash (place here)
 │   └── installer/
-│       ├── install.sh              # Top-level installer orchestrator
+│       ├── install.sh              # CLI installer orchestrator (fallback)
 │       ├── partition.sh            # GPT disk partitioning
 │       ├── copy-rootfs.sh          # squashfs → target filesystem copy
 │       ├── configure-bootloader.sh # Install GRUB on target disk
@@ -83,34 +89,46 @@ dayshield-iso/
 
 ```sh
 # From the dayshield-iso repository root
-make iso ROOTFS=../dayshield-rootfs/rootfs.tar.zst
+make iso \
+    ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
+    INSTALLER_UI=../dayshield-installer-ui/installer-ui
 
 # Custom output path
-make iso ROOTFS=/path/to/rootfs.tar.zst OUTPUT=/output/dayshield.iso
+make iso \
+    ROOTFS=/path/to/rootfs.tar.zst \
+    INSTALLER_UI=../dayshield-installer-ui/installer-ui \
+    OUTPUT=/output/dayshield.iso
 ```
 
 The built ISO is written to `dayshield.iso` (or the path given via `OUTPUT=`).
+
+`INSTALLER_UI` is optional but strongly recommended — without it the web-based
+installer UI will not be present in the live environment.
 
 ### Manual invocation
 
 ```sh
 bash scripts/build-iso.sh \
-    --rootfs ../dayshield-rootfs/rootfs.tar.zst \
-    --output dayshield.iso \
-    --arch   amd64
+    --rootfs       ../dayshield-rootfs/rootfs.tar.zst \
+    --installer-ui ../dayshield-installer-ui/installer-ui \
+    --output       dayshield.iso \
+    --arch         amd64
 ```
 
 ### Pipeline steps
 
 | Step | Script | Output |
 |------|--------|--------|
-| 1. Extract rootfs | `extract-rootfs.sh` | `build/rootfs/` |
-| 2. Build squashfs | `build-squashfs.sh` | `build/squashfs-rootfs.sqsh` |
-| 3. Locate kernel  | `build-kernel.sh`   | `build/kernel/vmlinuz`, `build/kernel/initrd.img` |
-| 4. Build initrd   | `build-initrd.sh`   | `build/kernel/initrd.img` (replaced) |
-| 5. Build bootloader | `build-bootloader.sh` | `build/bootloader/` |
-| 6. Assemble ISO   | `assemble-iso.sh`   | `dayshield.iso` |
-| 7. Cleanup        | `cleanup.sh`        | removes `build/` |
+| 1. Extract rootfs       | `extract-rootfs.sh`       | `build/rootfs/` |
+| 2. Inject installer UI  | `inject-installer-ui.sh`  | `build/rootfs/installer-ui/`, service units enabled |
+| 3. Build squashfs       | `build-squashfs.sh`       | `build/squashfs-rootfs.sqsh` |
+| 4. Locate kernel        | `build-kernel.sh`         | `build/kernel/vmlinuz`, `build/kernel/initrd.img` |
+| 5. Build initrd         | `build-initrd.sh`         | `build/kernel/initrd.img` (replaced) |
+| 6. Build bootloader     | `build-bootloader.sh`     | `build/bootloader/` |
+| 7. Assemble ISO         | `assemble-iso.sh`         | `dayshield.iso` |
+| 8. Cleanup              | `cleanup.sh`              | removes `build/` |
+
+> Step 2 is skipped when `--installer-ui` is not passed.
 
 ### Reproducibility
 
@@ -165,8 +183,32 @@ make verify-qemu ISO=dayshield.iso OVMF=/usr/share/OVMF/OVMF_CODE.fd
 
 ## Running the installer
 
-Boot the ISO in a VM or on bare metal. The live environment will auto-start
-or you can invoke the installer manually:
+Boot the ISO in a VM or on bare metal.  When the `installer` kernel parameter
+is present (the default in all boot menu entries), the live environment
+automatically starts the **web-based installer UI** on `tty1`:
+
+- `installer-ui-web.service` — serves the installer on `http://127.0.0.1:8080`
+- `installer-ui.service` — opens a browser on `tty1` pointing at the above URL
+
+If a graphical browser (`surf`, `midori`) is unavailable, `w3m` is used as a
+text-browser fallback.  The URL is always `http://127.0.0.1:8080/`.
+
+### Web UI installation flow
+
+1. **Welcome** — brief overview
+2. **Disk selection** — lists available disks via `/api/detect-disks.sh`
+3. **Partition** — creates GPT layout: 512 MiB EFI + remaining root
+4. **Format** — FAT32 EFI + ext4 root
+5. **Install rootfs** — extracts `rootfs.tar.zst` from the ISO to the target
+6. **Install bootloader** — installs GRUB (BIOS + UEFI) on the target disk
+7. **Configure** — hostname, root password, primary network interface
+8. **Finalize** — unmounts, syncs, removes installer artefacts
+9. **Reboot**
+
+### CLI fallback (no web UI)
+
+If the ISO was built without `--installer-ui`, shell scripts are still
+available under `/usr/lib/dayshield-installer/`:
 
 ```sh
 # Auto-detect target disk
@@ -174,21 +216,9 @@ sudo /usr/lib/dayshield-installer/install.sh
 
 # Specify target disk explicitly
 sudo DAYSHIELD_TARGET_DISK=/dev/sda /usr/lib/dayshield-installer/install.sh
-
-# Unattended (no confirmation prompt)
-sudo DAYSHIELD_TARGET_DISK=/dev/sda DAYSHIELD_UNATTENDED=1 \
-    /usr/lib/dayshield-installer/install.sh
 ```
 
-The installer:
-
-1. Partitions the target disk (GPT: 512 MiB EFI + rest root)
-2. Formats EFI as FAT32, root as ext4
-3. Copies the squashfs live image to the target root
-4. Installs GRUB (BIOS + UEFI)
-5. Enables `firstboot.service`
-
-On first boot:
+### First boot (after install)
 
 - SSH host keys are regenerated
 - `machine-id` is regenerated
@@ -198,21 +228,42 @@ On first boot:
 
 ---
 
-## Integration with rootfs builder
+## Integration with other repos
+
+### Building from scratch (all three repos)
 
 ```sh
-# In dayshield-rootfs repository
-make rootfs          # produces rootfs.tar.zst
+# 1. Build the root filesystem
+( cd ../dayshield-rootfs && make rootfs )
 
-# In dayshield-iso repository
-make iso ROOTFS=../dayshield-rootfs/rootfs.tar.zst
+# 2. Build the ISO (includes installer UI)
+make iso \
+    ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
+    INSTALLER_UI=../dayshield-installer-ui/installer-ui
 ```
 
-Or as a single pipeline:
+### Alpine.js bundle (required for installer UI)
+
+The installer UI uses Alpine.js for reactivity. Because the ISO is fully
+offline, the bundle must be present at
+`installer-ui/alpine.min.js` **before** the ISO build:
 
 ```sh
-( cd ../dayshield-rootfs && make rootfs ) && \
-make iso ROOTFS=../dayshield-rootfs/rootfs.tar.zst
+curl -Lo ../dayshield-installer-ui/installer-ui/alpine.min.js \
+  "https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"
+```
+
+### Compiled Tailwind CSS (optional)
+
+The `styles.css` in the installer UI repo contains Tailwind source directives.
+For production, compile it first:
+
+```sh
+cd ../dayshield-installer-ui/installer-ui
+npm install -D tailwindcss
+npx tailwindcss -i styles.css -o dist/styles.css \
+    --content "index.html,app.js" --minify
+# Then update the <link> in index.html to reference dist/styles.css
 ```
 
 ---
