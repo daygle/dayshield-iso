@@ -113,8 +113,8 @@ services, hardens IPv4, and produces:
 
 ```sh
 mkdir -p /tmp/ds-verify
-tar -I zstd -xf rootfs.tar.zst -C /tmp/ds-verify
-make verify ROOTFS_DIR=/tmp/ds-verify
+tar -I zstd -xf ~/dayshield-rootfs/rootfs.tar.zst -C /tmp/ds-verify
+make -C ~/dayshield-rootfs verify ROOTFS_DIR=/tmp/ds-verify
 rm -rf /tmp/ds-verify
 ```
 
