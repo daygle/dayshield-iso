@@ -116,11 +116,21 @@ check "grub.cfg contains 'filesystem'"  grep -q 'filesystem' "${ISO_MOUNT}/boot/
 echo ""
 echo "--- Boot metadata ---"
 if command -v xorriso &>/dev/null; then
-    ELTORITO_REPORT="$(xorriso -indev "${ISO}" -report_el_torito plain 2>/dev/null || true)"
-    check "El Torito report contains BIOS boot image" \
-        bash -c 'grep -Eq "El Torito boot img[[:space:]]*:.*boot/grub/bios\.img|El Torito img path[[:space:]]*: /boot/grub/bios\.img" <<<"${ELTORITO_REPORT}"'
-    check "El Torito report contains UEFI boot image" \
-        bash -c 'grep -Eq "El Torito boot img[[:space:]]*:.*EFI/efiboot\.img|El Torito img path[[:space:]]*: /EFI/efiboot\.img" <<<"${ELTORITO_REPORT}"'
+    ELTORITO_TMP="$(mktemp)"
+    xorriso -indev "${ISO}" -report_el_torito plain 2>/dev/null > "${ELTORITO_TMP}" || true
+    if check "El Torito report contains BIOS boot image" \
+           grep -q 'bios\.img' "${ELTORITO_TMP}"; then
+        true
+    fi
+    if check "El Torito report contains UEFI boot image" \
+           grep -Eq 'efiboot\.img|appended_partition_2' "${ELTORITO_TMP}"; then
+        true
+    fi
+    if [[ ${FAIL} -gt 0 ]]; then
+        echo "  xorriso report output:"
+        sed 's/^/    /' "${ELTORITO_TMP}"
+    fi
+    rm -f "${ELTORITO_TMP}"
 else
     echo "  [SKIP] xorriso not found; skipping El Torito metadata checks"
 fi

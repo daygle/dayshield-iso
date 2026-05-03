@@ -127,15 +127,14 @@ if [[ -f "${BOOT_HYBRID_IMG}" ]] && [[ -s "${BOOT_HYBRID_IMG}" ]]; then
 fi
 
 if [[ -f "${EFI_PART_IMG}" ]]; then
+    cp "${EFI_PART_IMG}" "${ISO_ROOT}/EFI/efiboot.img"
     XORRISO_EXTRA_ARGS+=(
         -eltorito-alt-boot
-        -e          "EFI/efiboot.img"
+        -e          "--interval:appended_partition_2:::"
         -no-emul-boot
         -append_partition 2 0xef "${EFI_PART_IMG}"
         -appended_part_as_gpt
-        -isohybrid-gpt-basdat
     )
-    cp "${EFI_PART_IMG}" "${ISO_ROOT}/EFI/efiboot.img"
 fi
 
 # ---------------------------------------------------------------------------
