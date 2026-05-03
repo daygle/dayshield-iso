@@ -67,8 +67,8 @@ echo ""
 # ---------------------------------------------------------------------------
 echo "--- Required files ---"
 check "live/filesystem.squashfs exists"    test -f "${ISO_MOUNT}/live/filesystem.squashfs"
-check "live/vmlinuz exists"                test -f "${ISO_MOUNT}/live/vmlinuz"
-check "live/initrd.img exists"             test -f "${ISO_MOUNT}/live/initrd.img"
+check "boot/vmlinuz exists"                test -f "${ISO_MOUNT}/boot/vmlinuz"
+check "boot/initrd.img exists"             test -f "${ISO_MOUNT}/boot/initrd.img"
 check "boot/grub/grub.cfg exists"          test -f "${ISO_MOUNT}/boot/grub/grub.cfg"
 check "boot/grub/bios.img exists"          test -f "${ISO_MOUNT}/boot/grub/bios.img"
 check "EFI/BOOT/BOOTX64.EFI exists"        test -f "${ISO_MOUNT}/EFI/BOOT/BOOTX64.EFI"
@@ -106,7 +106,7 @@ check "grub.cfg contains 'filesystem'"  grep -q 'filesystem' "${ISO_MOUNT}/boot/
 # ---------------------------------------------------------------------------
 echo ""
 echo "--- initrd ---"
-INITRD_SIZE="$(stat -c%s "${ISO_MOUNT}/live/initrd.img")"
+INITRD_SIZE="$(stat -c%s "${ISO_MOUNT}/boot/initrd.img")"
 check "initrd.img is non-empty (size=${INITRD_SIZE})"  test "${INITRD_SIZE}" -gt 0
 
 # ---------------------------------------------------------------------------
