@@ -120,15 +120,19 @@ fi
 EFI_IMG="${BOOT_DIR}/EFI/efiboot.img"
 mkdir -p "${BOOT_DIR}/EFI"
 
-# Size: round up to nearest mebibyte; at least 4 MiB
+# Size: round up to nearest mebibyte; keep at least 16 MiB so we can format
+# the ESP as FAT16 for broader firmware compatibility.
 EFI_BIN_SIZE=0
 [[ -f "${EFI_DIR}/BOOTX64.EFI" ]] && \
     EFI_BIN_SIZE="$(stat -c%s "${EFI_DIR}/BOOTX64.EFI")"
 EFI_IMG_MB=$(( (EFI_BIN_SIZE / 1048576) + 4 ))
+if [[ "${EFI_IMG_MB}" -lt 16 ]]; then
+    EFI_IMG_MB=16
+fi
 
 echo "--> Creating EFI System Partition image (${EFI_IMG_MB} MiB) …"
 dd if=/dev/zero bs=1M count="${EFI_IMG_MB}" of="${EFI_IMG}" 2>/dev/null
-mkfs.fat -F 12 -n "EFI" "${EFI_IMG}"
+mkfs.fat -F 16 -n "EFI" "${EFI_IMG}"
 
 # Mount and populate
 EFI_MOUNT="$(mktemp -d)"

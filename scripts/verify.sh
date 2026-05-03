@@ -80,6 +80,7 @@ check "boot/initrd.img exists"             test -f "${ISO_MOUNT}/boot/initrd.img
 check "boot/grub/grub.cfg exists"          test -f "${ISO_MOUNT}/boot/grub/grub.cfg"
 check "boot/grub/bios.img exists"          test -f "${ISO_MOUNT}/boot/grub/bios.img"
 check "EFI/BOOT/BOOTX64.EFI exists"        test -f "${ISO_MOUNT}/EFI/BOOT/BOOTX64.EFI"
+check "EFI/efiboot.img exists"            test -f "${ISO_MOUNT}/EFI/efiboot.img"
 check "installer/install.sh exists"        test -f "${ISO_MOUNT}/installer/install.sh"
 check "installer/partition.sh exists"      test -f "${ISO_MOUNT}/installer/partition.sh"
 check "installer/copy-rootfs.sh exists"    test -f "${ISO_MOUNT}/installer/copy-rootfs.sh"

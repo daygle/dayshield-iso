@@ -131,6 +131,8 @@ if [[ -f "${EFI_PART_IMG}" ]]; then
         -eltorito-alt-boot
         -e          "EFI/efiboot.img"
         -no-emul-boot
+        -append_partition 2 0xef "${EFI_PART_IMG}"
+        -appended_part_as_gpt
         -isohybrid-gpt-basdat
     )
     cp "${EFI_PART_IMG}" "${ISO_ROOT}/EFI/efiboot.img"
