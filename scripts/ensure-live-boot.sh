@@ -76,12 +76,12 @@ trap cleanup_mounts EXIT
 #                              autologin, etc.).
 # live-config-systemd        — systemd units for live-config.
 chroot "${ROOTFS_DIR}" /bin/sh -c \
-    'DEBIAN_FRONTEND=noninteractive apt-get -qq update 2>&1 | tail -5 && \
+    'DEBIAN_FRONTEND=noninteractive apt-get -qq update && \
      DEBIAN_FRONTEND=noninteractive apt-get -y --no-install-recommends install \
          live-boot \
          live-boot-initramfs-tools \
          live-config \
-         live-config-systemd 2>&1'
+         live-config-systemd'
 
 cleanup_mounts
 trap - EXIT
