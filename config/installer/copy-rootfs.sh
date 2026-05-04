@@ -25,6 +25,9 @@ if command -v rsync &>/dev/null; then
         --exclude=/sys \
         --exclude=/dev \
         --exclude=/run \
+        --exclude=/lib/live \
+        --exclude=/usr/lib/live \
+        --exclude=/etc/live \
         "${SQMOUNT}/" "${TARGET_MOUNT}/"
 else
     # Fallback to tar round-trip
@@ -33,6 +36,9 @@ else
         --exclude="./sys" \
         --exclude="./dev" \
         --exclude="./run" \
+        --exclude="./lib/live" \
+        --exclude="./usr/lib/live" \
+        --exclude="./etc/live" \
         -cf - . \
     | tar -C "${TARGET_MOUNT}" \
         --numeric-owner \
