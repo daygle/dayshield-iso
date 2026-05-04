@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# build-initrd.sh - Build the installer initrd using dracut (preferred) or
-#                   mkinitramfs as a fallback.
+# build-initrd.sh - Build the live ISO initrd using mkinitramfs (default) or
+#                   dracut when USE_DRACUT=1 is explicitly set.
 #
 # The generated initrd:
-#   • includes systemd, network drivers, ext4/xfs/btrfs, optional cryptsetup
-#   • disables IPv6 kernel module
+#   • uses mkinitramfs chrooted inside the live rootfs (live-boot / BOOT=live)
+#   • includes the live-boot hooks installed by ensure-live-boot.sh
 #   • embeds installer scripts into /usr/lib/dayshield-installer/
+#
+# Set USE_DRACUT=1 to opt into the dracut path instead of mkinitramfs.
 
 set -euo pipefail
 
@@ -13,6 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${BUILD_DIR:="${SCRIPT_DIR}/../build"}"
 : "${CONFIG_DIR:="${SCRIPT_DIR}/../config"}"
 : "${ARCH:="amd64"}"
+: "${USE_DRACUT:="0"}"
 
 KERNEL_DIR="${BUILD_DIR}/kernel"
 ROOTFS_DIR="${BUILD_DIR}/rootfs"
@@ -51,7 +54,7 @@ if [[ -d "${INSTALLER_SRC}" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Try dracut first (requires dracut-live package for dmsquash-live module)
+# dracut path (opt-in only: set USE_DRACUT=1)
 # ---------------------------------------------------------------------------
 DRACUT_LIVE_MODULE=""
 for _dir in /usr/lib/dracut/modules.d /lib/dracut/modules.d; do
@@ -61,7 +64,7 @@ for _dir in /usr/lib/dracut/modules.d /lib/dracut/modules.d; do
     fi
 done
 
-if command -v dracut &>/dev/null && [[ -n "${DRACUT_LIVE_MODULE}" ]]; then
+if [[ "${USE_DRACUT}" == "1" ]] && command -v dracut &>/dev/null && [[ -n "${DRACUT_LIVE_MODULE}" ]]; then
     echo "--> Using dracut (dmsquash-live: ${DRACUT_LIVE_MODULE}) …"
 
     DRACUT_CONF="$(mktemp --suffix=.conf)"
@@ -99,9 +102,9 @@ EOF
     rm -f "${DRACUT_CONF}"
 
 # ---------------------------------------------------------------------------
-# Fallback: mkinitramfs (CHROOTED)
+# Default: mkinitramfs (CHROOTED)
 # ---------------------------------------------------------------------------
-elif command -v mkinitramfs &>/dev/null; then
+elif command -v mkinitramfs &>/dev/null || chroot "${ROOTFS_DIR}" sh -c 'command -v mkinitramfs' &>/dev/null; then
     echo "--> Using mkinitramfs (chrooted) …"
 
     # Create hook inside rootfs
@@ -138,6 +141,15 @@ HOOK
     rm -f "${ROOTFS_DIR}/tmp/initrd.img"
     rm -f "${ROOTFS_DIR}/etc/initramfs-tools/hooks/dayshield-installer"
     rm -f "${ROOTFS_DIR}/etc/initramfs-tools/conf.d/live.conf"
+
+    # Verify live-boot scripts are present in the initrd
+    if command -v lsinitramfs &>/dev/null; then
+        if lsinitramfs "${KERNEL_DIR}/initrd.img" 2>/dev/null | grep -qE 'scripts/live|lib/live'; then
+            echo "--> live-boot scripts confirmed in initrd."
+        else
+            echo "WARNING: live-boot scripts not found in initrd; ISO may not boot." >&2
+        fi
+    fi
 
 else
     echo "WARNING: Neither dracut nor mkinitramfs found." >&2
