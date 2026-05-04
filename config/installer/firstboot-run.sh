@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# firstboot-run.sh — Executed once on the first boot after installation.
+# firstboot-run.sh - Executed once on the first boot after installation.
 #
 # Performs:
 #   1. Regenerate SSH host keys

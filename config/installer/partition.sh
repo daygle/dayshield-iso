@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# partition.sh — Partition a target disk for DayShield.
+# partition.sh - Partition a target disk for DayShield.
 #
 # Creates a GPT partition table with:
 #   Partition 1: EFI System Partition (512 MiB, FAT32)

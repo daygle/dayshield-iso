@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# cleanup.sh — Remove intermediate build artefacts.
+# cleanup.sh - Remove intermediate build artefacts.
 #
 # Keeps: the final ISO and any explicitly preserved artefacts.
 # Removes: build/ tree (rootfs extraction, squashfs work, bootloader staging,

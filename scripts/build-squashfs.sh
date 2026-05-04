@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-squashfs.sh — Build a deterministic squashfs image from build/rootfs/.
+# build-squashfs.sh - Build a deterministic squashfs image from build/rootfs/.
 
 set -euo pipefail
 
@@ -21,15 +21,15 @@ fi
 rm -f "${SQUASHFS_IMG}"
 
 # Build deterministic squashfs
-#   -comp zstd               — zstd compression
-#   -Xcompression-level 19   — maximum zstd compression
-#   -noappend                — overwrite if exists
-#   -all-root                — force uid/gid 0:0 for all files
-#   -no-xattrs               — exclude extended attributes (not needed for live)
-#   -no-fragments            — disable tail-end packing (reproducibility)
-#   -root-owned              — alias for -all-root (some versions)
-#   -mkfs-time 0             — set filesystem creation timestamp to epoch
-#   -wildcards               — enable wildcard exclusions
+#   -comp zstd               - zstd compression
+#   -Xcompression-level 19   - maximum zstd compression
+#   -noappend                - overwrite if exists
+#   -all-root                - force uid/gid 0:0 for all files
+#   -no-xattrs               - exclude extended attributes (not needed for live)
+#   -no-fragments            - disable tail-end packing (reproducibility)
+#   -root-owned              - alias for -all-root (some versions)
+#   -mkfs-time 0             - set filesystem creation timestamp to epoch
+#   -wildcards               - enable wildcard exclusions
 mksquashfs \
     "${ROOTFS_DIR}" \
     "${SQUASHFS_IMG}" \

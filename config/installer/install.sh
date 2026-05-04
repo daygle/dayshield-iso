@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install.sh — DayShield Firewall OS installer (runs inside the live environment)
+# install.sh - DayShield Firewall OS installer (runs inside the live environment)
 #
 # This script orchestrates the full installation:
 #   1. Detect or prompt for target disk

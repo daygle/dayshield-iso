@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# build-bootloader.sh — Build the hybrid BIOS+UEFI GRUB bootloader images.
+# build-bootloader.sh - Build the hybrid BIOS+UEFI GRUB bootloader images.
 #
 # Produces:
-#   build/bootloader/boot/grub/bios.img   — El Torito BIOS boot image
-#   build/bootloader/EFI/efiboot.img      — UEFI FAT EFI System Partition image
-#   build/bootloader/boot/grub/grub.cfg   — GRUB configuration (copied from config/)
-#   build/bootloader/boot/grub/boot_hybrid.img — MBR hybrid boot sector
+#   build/bootloader/boot/grub/bios.img   - El Torito BIOS boot image
+#   build/bootloader/EFI/efiboot.img      - UEFI FAT EFI System Partition image
+#   build/bootloader/boot/grub/grub.cfg   - GRUB configuration (copied from config/)
+#   build/bootloader/boot/grub/boot_hybrid.img - MBR hybrid boot sector
 
 set -euo pipefail
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-initrd.sh — Build the installer initrd using dracut (preferred) or
+# build-initrd.sh - Build the installer initrd using dracut (preferred) or
 #                   mkinitramfs as a fallback.
 #
 # The generated initrd:
@@ -22,7 +22,7 @@ INSTALLER_SRC="${CONFIG_DIR}/installer"
 # ---------------------------------------------------------------------------
 # Determine kernel version
 # ---------------------------------------------------------------------------
-# Prefer the modules directory name — it is the exact string the kernel and
+# Prefer the modules directory name - it is the exact string the kernel and
 # dracut need, and avoids regex mis-truncation (e.g. 6.1.0-42-rt-amd64 vs
 # 6.1.0-42-rt).
 KVER="$(ls "${ROOTFS_DIR}/lib/modules/" 2>/dev/null | sort -V | tail -n1 || true)"
@@ -67,7 +67,7 @@ if command -v dracut &>/dev/null && [[ -n "${DRACUT_LIVE_MODULE}" ]]; then
     DRACUT_CONF="$(mktemp --suffix=.conf)"
     cat > "${DRACUT_CONF}" <<'EOF'
 # DayShield installer initrd configuration
-# 'network' is intentionally omitted — not available on all build hosts and
+# 'network' is intentionally omitted - not available on all build hosts and
 # not required for live squashfs boot; networking starts post-pivot via
 # systemd-networkd in the live environment.
 add_dracutmodules+=" systemd base rootfs-block "
@@ -80,7 +80,7 @@ EOF
     KMODDIR_ARG=""
     if [[ -n "${KERNEL_VERSION}" ]]; then
         KVER_ARG="--kver ${KERNEL_VERSION}"
-        # Point dracut at the rootfs modules — the build host won't have them
+        # Point dracut at the rootfs modules - the build host won't have them
         MODULES_DIR="${ROOTFS_DIR}/lib/modules/${KERNEL_VERSION}"
         if [[ -d "${MODULES_DIR}" ]]; then
             KMODDIR_ARG="--kmoddir ${MODULES_DIR}"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# copy-rootfs.sh — Extract the squashfs live image onto the target root
+# copy-rootfs.sh - Extract the squashfs live image onto the target root
 #                  filesystem mount point.
 #
 # Usage: copy-rootfs.sh <squashfs.img> <target-mountpoint>

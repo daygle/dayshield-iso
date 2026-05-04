@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-iso.sh — Main entrypoint for the DayShield ISO builder.
+# build-iso.sh - Main entrypoint for the DayShield ISO builder.
 #
 # Usage:
 #   build-iso.sh [--rootfs rootfs.tar.zst] [--output dayshield.iso] [--arch amd64]

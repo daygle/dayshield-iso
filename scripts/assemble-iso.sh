@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# assemble-iso.sh — Assemble the final DayShield installer ISO using xorriso.
+# assemble-iso.sh - Assemble the final DayShield installer ISO using xorriso.
 #
 # ISO layout:
-#   /boot/grub/         — GRUB configuration, modules, bios.img
-#   /EFI/BOOT/          — UEFI binaries
-#   /EFI/efiboot.img    — FAT EFI system partition image (appended partition)
-#   /live/              — squashfs
-#   /boot/              — kernel + initrd (FIXED)
-#   /installer/         — installer scripts
+#   /boot/grub/         - GRUB configuration, modules, bios.img
+#   /EFI/BOOT/          - UEFI binaries
+#   /EFI/efiboot.img    - FAT EFI system partition image (appended partition)
+#   /live/              - squashfs
+#   /boot/              - kernel + initrd (FIXED)
+#   /installer/         - installer scripts
 
 set -euo pipefail
 

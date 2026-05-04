@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-kernel.sh — Extract vmlinuz and a base initrd from the rootfs.
+# build-kernel.sh - Extract vmlinuz and a base initrd from the rootfs.
 #
 # Strategy:
 #   1. Look for a kernel already present in build/rootfs (copied from rootfs.tar.zst).
@@ -20,7 +20,7 @@ mkdir -p "${KERNEL_DIR}"
 
 echo "--> Locating kernel in rootfs …"
 
-# Prefer non-RT kernel — RT kernels require CONSTANT_TSC which QEMU TCG does
+# Prefer non-RT kernel - RT kernels require CONSTANT_TSC which QEMU TCG does
 # not provide, causing hangs.  Fall back to RT only if nothing else is present.
 VMLINUZ="$(find "${ROOTFS_DIR}/boot" -maxdepth 1 -name 'vmlinuz*' -type f 2>/dev/null \
            | grep -v '\-rt' | sort -V | tail -n1 || true)"
@@ -77,7 +77,7 @@ if [[ -n "${INITRD}" ]]; then
     echo "    initrd : ${INITRD}"
     cp "${INITRD}" "${KERNEL_DIR}/initrd.img"
 else
-    echo "    initrd : (placeholder — will be replaced by build-initrd.sh)"
+    echo "    initrd : (placeholder - will be replaced by build-initrd.sh)"
     touch "${KERNEL_DIR}/initrd.img"
 fi
 

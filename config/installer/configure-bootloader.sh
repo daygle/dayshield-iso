@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# configure-bootloader.sh — Install and configure GRUB on the target system.
+# configure-bootloader.sh - Install and configure GRUB on the target system.
 #
 # Installs GRUB for:
 #   • BIOS boot  (i386-pc target via grub-install)
