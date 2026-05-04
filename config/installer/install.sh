@@ -132,6 +132,43 @@ info "Extracting rootfs squashfs …"
 "${INSTALLER_DIR}/copy-rootfs.sh" "${SQUASHFS_IMG}" "${TARGET_MOUNT}"
 
 # ---------------------------------------------------------------------------
+# Clean live-boot artefacts from the installed target
+# ---------------------------------------------------------------------------
+info "Preparing target chroot environment …"
+for _fs in dev dev/pts proc sys run; do
+    mkdir -p "${TARGET_MOUNT}/${_fs}"
+    mount --bind "/${_fs}" "${TARGET_MOUNT}/${_fs}"
+done
+
+cleanup_chroot_mounts() {
+    for _fs in run sys proc dev/pts dev; do
+        umount -lf "${TARGET_MOUNT}/${_fs}" 2>/dev/null || true
+    done
+}
+trap cleanup_chroot_mounts EXIT
+
+info "Purging live-boot / live-config packages from target …"
+chroot "${TARGET_MOUNT}" /bin/sh -c \
+    'DEBIAN_FRONTEND=noninteractive apt-get -y --purge remove \
+        live-boot live-boot-initramfs-tools \
+        live-config live-config-systemd live-config-sysvinit \
+        live-tools 2>/dev/null || true'
+
+# Remove any leftover live directories not caught by the package purge
+info "Removing leftover live directories …"
+rm -rf \
+    "${TARGET_MOUNT}/lib/live" \
+    "${TARGET_MOUNT}/usr/lib/live" \
+    "${TARGET_MOUNT}/etc/live"
+
+# Regenerate a clean initramfs without live-boot hooks
+info "Regenerating initramfs inside target …"
+chroot "${TARGET_MOUNT}" update-initramfs -u -k all
+
+cleanup_chroot_mounts
+trap - EXIT
+
+# ---------------------------------------------------------------------------
 # Configure target system
 # ---------------------------------------------------------------------------
 
