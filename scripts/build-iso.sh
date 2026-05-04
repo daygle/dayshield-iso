@@ -2,7 +2,7 @@
 # build-iso.sh - Main entrypoint for the DayShield ISO builder.
 #
 # Usage:
-#   build-iso.sh [--rootfs rootfs.tar.zst] [--output dayshield.iso] [--arch amd64]
+#   build-iso.sh [--rootfs rootfs.tar.zst] [--installer-ui path] [--output dayshield.iso] [--arch amd64]
 #
 # All sub-scripts are expected to live alongside this script.
 
@@ -47,6 +47,11 @@ if [[ -z "${ROOTFS}" ]]; then
     exit 1
 fi
 
+if [[ -z "${INSTALLER_UI_DIR}" ]]; then
+    echo "ERROR: --installer-ui <path-to-installer-ui-dir> is required." >&2
+    exit 1
+fi
+
 if [[ ! -f "${ROOTFS}" ]]; then
     echo "ERROR: rootfs archive not found: ${ROOTFS}" >&2
     exit 1
@@ -67,7 +72,7 @@ echo "    rootfs  : ${ROOTFS}"
 echo "    output  : ${OUTPUT}"
 echo "    arch    : ${ARCH}"
 echo "    build   : ${BUILD_DIR}"
-[[ -n "${INSTALLER_UI_DIR}" ]] && echo "    installer-ui: ${INSTALLER_UI_DIR}"
+echo "    installer-ui: ${INSTALLER_UI_DIR}"
 
 validate_installer_ui() {
     local dir="$1"
@@ -83,9 +88,7 @@ validate_installer_ui() {
     fi
 }
 
-if [[ -n "${INSTALLER_UI_DIR}" ]]; then
-    validate_installer_ui "${INSTALLER_UI_DIR}"
-fi
+validate_installer_ui "${INSTALLER_UI_DIR}"
 
 # ---------------------------------------------------------------------------
 # Helper: run a sub-script with consistent environment
@@ -105,16 +108,14 @@ run_step() {
 run_step extract-rootfs.sh  --rootfs "${ROOTFS}"
 
 # Inject installer UI files into the live rootfs before squashfs is built
-if [[ -n "${INSTALLER_UI_DIR}" ]]; then
-    run_step inject-installer-ui.sh --installer-ui "${INSTALLER_UI_DIR}"
-fi
+run_step inject-installer-ui.sh --installer-ui "${INSTALLER_UI_DIR}"
 
 run_step build-squashfs.sh
 run_step build-kernel.sh
 run_step build-initrd.sh
 run_step build-bootloader.sh
 ASSEMBLE_ARGS=(--output "${OUTPUT}")
-[[ -n "${INSTALLER_UI_DIR}" ]] && ASSEMBLE_ARGS+=(--installer-ui "${INSTALLER_UI_DIR}")
+ASSEMBLE_ARGS+=(--installer-ui "${INSTALLER_UI_DIR}")
 ASSEMBLE_ARGS+=(--rootfs "${ROOTFS}")
 run_step assemble-iso.sh "${ASSEMBLE_ARGS[@]}"
 

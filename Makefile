@@ -11,7 +11,7 @@ SHELL := /usr/bin/env bash -euo pipefail
 ROOTFS       ?= rootfs.tar.zst
 OUTPUT       ?= dayshield.iso
 ARCH         ?= amd64
-INSTALLER_UI ?=
+INSTALLER_UI ?= ../dayshield-installer-ui/installer-ui
 
 SCRIPTS_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))scripts
 
@@ -22,7 +22,12 @@ SCRIPTS_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))scripts
 iso: ## Build the DayShield installer ISO
 	@test -f "$(ROOTFS)" || { \
 	  echo "ERROR: ROOTFS not found: $(ROOTFS)"; \
-	  echo "Usage: make iso ROOTFS=<path-to-rootfs.tar.zst> [INSTALLER_UI=<path-to-installer-ui-dir>]"; \
+	  echo "Usage: make iso ROOTFS=<path-to-rootfs.tar.zst> INSTALLER_UI=<path-to-installer-ui-dir>"; \
+	  exit 1; \
+	}
+	@test -d "$(INSTALLER_UI)" || { \
+	  echo "ERROR: INSTALLER_UI not found: $(INSTALLER_UI)"; \
+	  echo "Usage: make iso ROOTFS=<path-to-rootfs.tar.zst> INSTALLER_UI=<path-to-installer-ui-dir>"; \
 	  exit 1; \
 	}
 	@echo "==> Building DayShield ISO …"
@@ -30,7 +35,7 @@ iso: ## Build the DayShield installer ISO
 	    --rootfs "$(ROOTFS)" \
 	    --output "$(OUTPUT)" \
 	    --arch   "$(ARCH)" \
-	    $(if $(INSTALLER_UI),--installer-ui "$(INSTALLER_UI)",)
+	    --installer-ui "$(INSTALLER_UI)"
 	@echo ""
 	@echo "ISO: $(OUTPUT)"
 

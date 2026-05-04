@@ -101,11 +101,11 @@ info "Partitioning ${TARGET_DISK} …"
 
 # Determine partition names (handle nvme, mmcblk naming conventions)
 if [[ "${TARGET_DISK}" =~ (nvme|mmcblk) ]]; then
-    EFI_PART="${TARGET_DISK}p1"
-    ROOT_PART="${TARGET_DISK}p2"
+    EFI_PART="${TARGET_DISK}p2"
+    ROOT_PART="${TARGET_DISK}p3"
 else
-    EFI_PART="${TARGET_DISK}1"
-    ROOT_PART="${TARGET_DISK}2"
+    EFI_PART="${TARGET_DISK}2"
+    ROOT_PART="${TARGET_DISK}3"
 fi
 
 # ---------------------------------------------------------------------------
@@ -115,7 +115,7 @@ info "Formatting EFI partition: ${EFI_PART}"
 mkfs.fat -F 32 -n "EFI" "${EFI_PART}"
 
 info "Formatting root partition: ${ROOT_PART}"
-mkfs.ext4 -F -L "dayshield" "${ROOT_PART}"
+mkfs.ext4 -F -L "dayshield-root" "${ROOT_PART}"
 
 # ---------------------------------------------------------------------------
 # Mount

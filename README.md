@@ -268,7 +268,7 @@ available) or from another machine on the same network.
 Installation steps:
 
 1. **Select disk** - choose target installation disk
-2. **Partition** - creates GPT layout: 512 MiB EFI + remaining root
+2. **Partition** - creates GPT layout: 1 MiB bios_grub + 512 MiB EFI + remaining root
 3. **Format** - FAT32 EFI, ext4 root
 4. **Install rootfs** - extracts the rootfs archive from the ISO to the target
 5. **Install bootloader** - GRUB BIOS + UEFI on the target disk
@@ -385,8 +385,7 @@ make iso \
 
 The built ISO is written to `dayshield.iso` (or the path given via `OUTPUT=`).
 
-`INSTALLER_UI` is optional but strongly recommended - without it the web-based
-installer UI will not be present in the live environment.
+`INSTALLER_UI` is required.
 
 When `INSTALLER_UI` is set, these files are required and validated before the
 pipeline starts: `index.html`, `styles.css`, `app.js`, `alpine.min.js`,
@@ -415,8 +414,6 @@ bash scripts/build-iso.sh \
 | 6. Build bootloader     | `build-bootloader.sh`     | `build/bootloader/` |
 | 7. Assemble ISO         | `assemble-iso.sh`         | `dayshield.iso` |
 | 8. Cleanup              | `cleanup.sh`              | removes `build/` |
-
-> Step 2 is skipped when `--installer-ui` is not passed.
 
 ### Reproducibility
 
@@ -493,7 +490,7 @@ to open the installer from another machine at `http://<live-ip>:8080/`.
 
 1. **Welcome** - brief overview
 2. **Disk selection** - lists available disks via `/api/detect-disks.sh`
-3. **Partition** - creates GPT layout: 512 MiB EFI + remaining root
+3. **Partition** - creates GPT layout: 1 MiB bios_grub + 512 MiB EFI + remaining root
 4. **Format** - FAT32 EFI + ext4 root
 5. **Install rootfs** - extracts `rootfs.tar.zst` from the ISO to the target
 6. **Install bootloader** - installs GRUB (BIOS + UEFI) on the target disk
@@ -501,10 +498,10 @@ to open the installer from another machine at `http://<live-ip>:8080/`.
 8. **Finalize** - unmounts, syncs, removes installer artefacts
 9. **Reboot**
 
-### CLI fallback (no web UI)
+### CLI fallback (manual install path)
 
-If the ISO was built without `--installer-ui`, shell scripts are still
-available under `/usr/lib/dayshield-installer/`:
+If the web UI cannot be used, shell installer scripts are available under
+`/usr/lib/dayshield-installer/`:
 
 ```sh
 # Auto-detect target disk
