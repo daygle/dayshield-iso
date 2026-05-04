@@ -71,12 +71,14 @@ for unit in installer-ui.service installer-ui-web.service; do
 done
 
 # ---------------------------------------------------------------------------
-# Enable the services (wants symlinks for multi-user.target)
+# Enable the installer web service (wants symlink for multi-user.target).
+# Keep tty1 console launcher disabled by default to avoid VM consoles that
+# appear unresponsive when tty ownership is transferred.
 # ---------------------------------------------------------------------------
 WANTS_DIR="${SYSTEMD_DEST}/multi-user.target.wants"
 mkdir -p "${WANTS_DIR}"
 
-for unit in installer-ui.service installer-ui-web.service; do
+for unit in installer-ui-web.service; do
     if [[ -f "${SYSTEMD_DEST}/${unit}" ]]; then
         ln -sf "/etc/systemd/system/${unit}" "${WANTS_DIR}/${unit}"
         echo "    enabled  ${unit} → multi-user.target"
