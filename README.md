@@ -169,6 +169,59 @@ make verify ISO=dayshield.iso
 
 ---
 
+### Iterative rebuilds (no snapshot revert needed)
+
+You do not need to revert your build VM to a snapshot between ISO builds.
+The build is self-cleaning — just run `make clean` before rebuilding.
+
+**Changed only installer UI files** (scripts, HTML, JS — not `packages.txt`):
+
+```sh
+cd ~/dayshield-iso
+make clean
+make iso \
+    ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
+    INSTALLER_UI=../dayshield-installer-ui/installer-ui
+```
+
+`make clean` removes the intermediate `build/` directory only.
+The existing `rootfs.tar.zst` is reused as-is — no rootfs rebuild needed.
+
+**Changed rootfs files** (`packages.txt`, service units, scripts):
+
+```sh
+cd ~/dayshield-rootfs
+make clean && make rootfs
+
+cd ~/dayshield-iso
+make clean
+make iso \
+    ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
+    INSTALLER_UI=../dayshield-installer-ui/installer-ui
+```
+
+**Changed `dayshield-core` source:**
+
+```sh
+cd ~/dayshield-core
+cargo build --release
+cp target/release/dayshield-core ~/dayshield-rootfs/dayshield-core
+
+cd ~/dayshield-rootfs
+make clean && make rootfs
+
+cd ~/dayshield-iso
+make clean
+make iso \
+    ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
+    INSTALLER_UI=../dayshield-installer-ui/installer-ui
+```
+
+> `make distclean` (in dayshield-iso) also removes the final `dayshield.iso`
+> in addition to `build/`.  Use it only when you want a fully clean slate.
+
+---
+
 ### Phase 7 - Boot the ISO in QEMU
 
 ```sh
