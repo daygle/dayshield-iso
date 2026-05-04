@@ -110,6 +110,12 @@ run_step extract-rootfs.sh  --rootfs "${ROOTFS}"
 # Inject installer UI files into the live rootfs before squashfs is built
 run_step inject-installer-ui.sh --installer-ui "${INSTALLER_UI_DIR}"
 
+# Ensure live-boot / live-config are present in the live rootfs so that:
+#   1. The squashfs contains the live-boot scripts needed by the live session.
+#   2. mkinitramfs (build-initrd.sh) can include the live-boot initramfs hook.
+# This is a no-op if the packages are already installed.
+run_step ensure-live-boot.sh
+
 run_step build-squashfs.sh
 run_step build-kernel.sh
 run_step build-initrd.sh
