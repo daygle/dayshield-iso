@@ -80,9 +80,20 @@ cp target/release/dayshield-core ~/dayshield-rootfs/dayshield-core
 
 ---
 
-### Phase 4 - Fetch offline UI bundles
+### Phase 4 - Verify offline UI bundles
 
-The installer UI is fully offline. Both Alpine and Tailwind runtime bundles must exist before the ISO build. They are never fetched during the build itself.
+The installer UI is fully offline. Alpine and Tailwind runtime bundles are now
+vendored in the installer-ui repository and should already be present after
+clone/pull.
+
+Required files:
+
+```sh
+ls -l ~/dayshield-installer-ui/installer-ui/alpine.min.js \
+      ~/dayshield-installer-ui/installer-ui/tailwind.min.js
+```
+
+If you need to refresh them manually, run:
 
 ```sh
 curl -Lo ~/dayshield-installer-ui/installer-ui/alpine.min.js \
