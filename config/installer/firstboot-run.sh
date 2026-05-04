@@ -49,9 +49,6 @@ echo "--> Resetting network configuration …"
 find /var/lib/dhcp/ -name '*.leases' -delete 2>/dev/null || true
 find /var/lib/dhclient/ -name '*.leases' -delete 2>/dev/null || true
 
-# Clear predictable interface name symlinks so they get recreated
-rm -f /etc/systemd/network/10-*.link 2>/dev/null || true
-
 # Reload network units
 systemctl daemon-reload 2>/dev/null || true
 systemctl restart systemd-networkd 2>/dev/null || true
