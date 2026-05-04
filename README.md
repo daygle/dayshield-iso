@@ -150,8 +150,8 @@ make iso \
     INSTALLER_UI=../dayshield-installer-ui/installer-ui
 ```
 
-This runs the full pipeline (extract â†’ inject installer UI â†’ squashfs â†’
-kernel â†’ initrd â†’ bootloader â†’ assemble) and produces:
+This runs the full pipeline (extract -> inject installer UI -> squashfs ->
+kernel -> initrd -> bootloader -> assemble) and produces:
 
 ```
 ~/dayshield-iso/dayshield.iso
@@ -192,7 +192,7 @@ qemu-system-x86_64 \
   -nographic
 ```
 
-Expected boot sequence: GRUB menu â†’ kernel messages â†’ systemd â†’ installer
+Expected boot sequence: GRUB menu -> kernel messages -> systemd -> installer
 launched on tty1.
 
 > **Live session login** - username `root`, password `dayshield`.  This
@@ -286,29 +286,29 @@ apt-get install \
 
 ```
 dayshield-iso/
-â”œâ”€â”€ scripts/
-â”‚   â”œâ”€â”€ build-iso.sh              # Main entrypoint
-â”‚   â”œâ”€â”€ extract-rootfs.sh         # Extract rootfs.tar.zst â†’ build/rootfs/
-â”‚   â”œâ”€â”€ inject-installer-ui.sh    # Inject web installer UI into live rootfs
-â”‚   â”œâ”€â”€ build-squashfs.sh         # Build deterministic squashfs image
-â”‚   â”œâ”€â”€ build-kernel.sh           # Locate/extract vmlinuz + initrd
-â”‚   â”œâ”€â”€ build-initrd.sh           # Build installer initrd (dracut/mkinitramfs)
-â”‚   â”œâ”€â”€ build-bootloader.sh       # Build hybrid BIOS+UEFI GRUB images
-â”‚   â”œâ”€â”€ assemble-iso.sh           # Assemble final ISO with xorriso
-â”‚   â”œâ”€â”€ cleanup.sh                # Remove intermediate artefacts
-â”‚   â””â”€â”€ verify.sh                 # Content and boot verification
-â”œâ”€â”€ config/
-â”‚   â”œâ”€â”€ grub.cfg                  # GRUB boot menu
-â”‚   â”œâ”€â”€ isolinux.cfg              # ISOLINUX/SYSLINUX fallback menu
-â”‚   â””â”€â”€ installer/
-â”‚       â”œâ”€â”€ install.sh              # CLI installer orchestrator (fallback)
-â”‚       â”œâ”€â”€ partition.sh            # GPT disk partitioning
-â”‚       â”œâ”€â”€ copy-rootfs.sh          # squashfs â†’ target filesystem copy
-â”‚       â”œâ”€â”€ configure-bootloader.sh # Install GRUB on target disk
-â”‚       â”œâ”€â”€ firstboot.service       # systemd unit for first-boot tasks
-â”‚       â””â”€â”€ firstboot-run.sh        # First-boot script (SSH keys, machine-idâ€¦)
-â”œâ”€â”€ Makefile
-â””â”€â”€ README.md
+|-- scripts/
+|   |-- build-iso.sh              # Main entrypoint
+|   |-- extract-rootfs.sh         # Extract rootfs.tar.zst -> build/rootfs/
+|   |-- inject-installer-ui.sh    # Inject web installer UI into live rootfs
+|   |-- build-squashfs.sh         # Build deterministic squashfs image
+|   |-- build-kernel.sh           # Locate/extract vmlinuz + initrd
+|   |-- build-initrd.sh           # Build installer initrd (dracut/mkinitramfs)
+|   |-- build-bootloader.sh       # Build hybrid BIOS+UEFI GRUB images
+|   |-- assemble-iso.sh           # Assemble final ISO with xorriso
+|   |-- cleanup.sh                # Remove intermediate artifacts
+|   `-- verify.sh                 # Content and boot verification
+|-- config/
+|   |-- grub.cfg                  # GRUB boot menu
+|   |-- isolinux.cfg              # ISOLINUX/SYSLINUX fallback menu
+|   `-- installer/
+|       |-- install.sh              # CLI installer orchestrator (fallback)
+|       |-- partition.sh            # GPT disk partitioning
+|       |-- copy-rootfs.sh          # squashfs -> target filesystem copy
+|       |-- configure-bootloader.sh # Install GRUB on target disk
+|       |-- firstboot.service       # systemd unit for first-boot tasks
+|       `-- firstboot-run.sh        # First-boot script (SSH keys, machine-id...)
+|-- Makefile
+`-- README.md
 ```
 
 ---
