@@ -21,6 +21,28 @@ Takes the output of [dayshield-rootfs](https://github.com/daygle/dayshield-rootf
 
 ---
 
+## Requirements
+
+Build host OS: **Debian 13** (or Ubuntu equivalent).
+
+```sh
+apt-get install -y \
+    xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin \
+    dosfstools dracut zstd parted rsync util-linux \
+    mmdebstrap systemd-container
+```
+
+**Rust** (for building `dayshield-core`) — install via rustup, not apt:
+
+```sh
+curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain 1.88.0
+source "$HOME/.cargo/env"
+```
+
+See the [Build host packages](#build-host-packages) table for full details.
+
+---
+
 ## End-to-end build guide
 
 This section walks through building a fully functional DayShield installer ISO
@@ -343,6 +365,7 @@ dayshield-iso/
 |   |-- build-iso.sh              # Main entrypoint
 |   |-- extract-rootfs.sh         # Extract rootfs.tar.zst -> build/rootfs/
 |   |-- inject-installer-ui.sh    # Inject web installer UI into live rootfs
+|   |-- ensure-live-boot.sh       # Ensure live-boot/live-config are present in live rootfs
 |   |-- build-squashfs.sh         # Build deterministic squashfs image
 |   |-- build-kernel.sh           # Locate/extract vmlinuz + initrd
 |   |-- build-initrd.sh           # Build installer initrd (dracut/mkinitramfs)
@@ -389,7 +412,7 @@ The built ISO is written to `dayshield.iso` (or the path given via `OUTPUT=`).
 
 When `INSTALLER_UI` is set, these files are required and validated before the
 pipeline starts: `index.html`, `styles.css`, `app.js`, `alpine.min.js`,
-`httpd.conf`, `systemd/installer-ui.service`, and
+`tailwind.min.js`, `httpd.conf`, `systemd/installer-ui.service`, and
 `systemd/installer-ui-web.service`.
 
 ### Manual invocation
@@ -408,12 +431,13 @@ bash scripts/build-iso.sh \
 |------|--------|--------|
 | 1. Extract rootfs       | `extract-rootfs.sh`       | `build/rootfs/` |
 | 2. Inject installer UI  | `inject-installer-ui.sh`  | `build/rootfs/installer-ui/`, service units enabled |
-| 3. Build squashfs       | `build-squashfs.sh`       | `build/squashfs-rootfs.sqsh` |
-| 4. Locate kernel        | `build-kernel.sh`         | `build/kernel/vmlinuz`, `build/kernel/initrd.img` |
-| 5. Build initrd         | `build-initrd.sh`         | `build/kernel/initrd.img` (replaced) |
-| 6. Build bootloader     | `build-bootloader.sh`     | `build/bootloader/` |
-| 7. Assemble ISO         | `assemble-iso.sh`         | `dayshield.iso` |
-| 8. Cleanup              | `cleanup.sh`              | removes `build/` |
+| 3. Ensure live-boot     | `ensure-live-boot.sh`     | `live-boot`/`live-config` installed into `build/rootfs/` if absent |
+| 4. Build squashfs       | `build-squashfs.sh`       | `build/squashfs-rootfs.sqsh` |
+| 5. Locate kernel        | `build-kernel.sh`         | `build/kernel/vmlinuz`, `build/kernel/initrd.img` |
+| 6. Build initrd         | `build-initrd.sh`         | `build/kernel/initrd.img` (replaced) |
+| 7. Build bootloader     | `build-bootloader.sh`     | `build/bootloader/` |
+| 8. Assemble ISO         | `assemble-iso.sh`         | `dayshield.iso` |
+| 9. Cleanup              | `cleanup.sh`              | removes `build/` |
 
 ### Reproducibility
 
@@ -477,14 +501,18 @@ make verify-qemu ISO=dayshield.iso OVMF=/usr/share/OVMF/OVMF_CODE.fd
 
 Boot the ISO in a VM or on bare metal.  When the `installer` kernel parameter
 is present (the default in all boot menu entries), the live environment
-automatically starts the **web-based installer UI** on `tty1`:
+automatically starts the **web-based installer UI**:
 
 - `installer-ui-web.service` - serves the installer on `http://0.0.0.0:8080`
+  (auto-enabled in `multi-user.target`)
 - `installer-ui.service` - opens a browser on `tty1` pointing at the above URL
+  (not auto-enabled by default, to avoid VM consoles appearing unresponsive
+  when tty ownership is transferred)
 
-Browser launch order on tty1 is: `epiphany-browser`, `firefox`, `chromium`,
-`surf`, then `midori`. If none are installed, the service prints instructions
-to open the installer from another machine at `http://<live-ip>:8080/`.
+Browser launch order if `installer-ui.service` is manually started on tty1:
+`epiphany-browser`, `firefox`, `chromium`, `surf`, then `midori`. If none are
+installed, the service prints instructions to open the installer from another
+machine at `http://<live-ip>:8080/`.
 
 ### Web UI installation flow
 
