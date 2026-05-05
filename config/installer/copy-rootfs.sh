@@ -28,6 +28,7 @@ if command -v rsync &>/dev/null; then
         --exclude=/lib/live \
         --exclude=/usr/lib/live \
         --exclude=/etc/live \
+        --exclude=/installer-ui \
         "${SQMOUNT}/" "${TARGET_MOUNT}/"
 else
     # Fallback to tar round-trip
@@ -39,6 +40,7 @@ else
         --exclude="./lib/live" \
         --exclude="./usr/lib/live" \
         --exclude="./etc/live" \
+        --exclude="./installer-ui" \
         -cf - . \
     | tar -C "${TARGET_MOUNT}" \
         --numeric-owner \

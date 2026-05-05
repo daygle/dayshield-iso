@@ -138,6 +138,11 @@ HOOK
     echo 'BOOT=live' > "${ROOTFS_DIR}/etc/initramfs-tools/conf.d/live.conf"
 
     # Run mkinitramfs inside the rootfs so it sees the correct modules + payload
+    if [[ -z "${KERNEL_VERSION}" ]]; then
+        echo "ERROR: KERNEL_VERSION is empty — cannot build initrd." >&2
+        echo "       Ensure build-kernel.sh completed successfully and the kernel is named vmlinuz-<version>." >&2
+        exit 1
+    fi
     chroot "${ROOTFS_DIR}" mkinitramfs -o /tmp/initrd.img "${KERNEL_VERSION}"
 
     # Copy initrd out of chroot
@@ -158,8 +163,9 @@ HOOK
     fi
 
 else
-    echo "WARNING: Neither dracut nor mkinitramfs found." >&2
-    echo "         The placeholder initrd.img will be used." >&2
+    echo "ERROR: Neither dracut nor mkinitramfs found on the build host." >&2
+    echo "       Install initramfs-tools (for mkinitramfs) or dracut before building." >&2
+    exit 1
 fi
 
 # ---------------------------------------------------------------------------

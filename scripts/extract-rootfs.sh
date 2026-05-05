@@ -41,7 +41,15 @@ umask 022
 #   --no-same-owner    — do not restore original ownership (run as current user)
 #   --no-same-permissions — apply umask instead of archive permissions
 #   --exclude=./dev    — skip device nodes entirely
-# zstd is handled transparently by modern tar (requires zstd on PATH)
+# Determine decompression strategy upfront to avoid silencing real errors
+if command -v zstd &>/dev/null; then
+    DECOMPRESS_ARGS=(--use-compress-program="zstd -d")
+else
+    # Modern tar (>=1.31 compiled with libzstd) may handle .zst automatically;
+    # this will fail if the tar binary lacks built-in zstd support.
+    DECOMPRESS_ARGS=()
+fi
+
 tar \
     --extract \
     --file="${ROOTFS}" \
@@ -52,18 +60,7 @@ tar \
     --exclude="./proc/*" \
     --exclude="./sys/*" \
     --exclude="./run/*" \
-    --use-compress-program="zstd -d" \
-    2>/dev/null || \
-tar \
-    --extract \
-    --file="${ROOTFS}" \
-    --directory="${ROOTFS_DIR}" \
-    --no-same-owner \
-    --no-same-permissions \
-    --exclude="./dev/*" \
-    --exclude="./proc/*" \
-    --exclude="./sys/*" \
-    --exclude="./run/*"
+    "${DECOMPRESS_ARGS[@]}"
 
 # Re-create minimal /dev entries as empty directories (no device nodes)
 mkdir -p "${ROOTFS_DIR}/dev"

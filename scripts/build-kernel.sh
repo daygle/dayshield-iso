@@ -31,6 +31,12 @@ if [[ -z "${VMLINUZ}" ]]; then
 fi
 
 KVER="$(basename "${VMLINUZ}" | sed 's/vmlinuz-//')"
+# If KVER equals "vmlinuz" (no suffix stripped) or is empty, it is invalid
+if [[ -z "${KVER}" ]] || [[ "${KVER}" == "vmlinuz" ]]; then
+    echo "ERROR: Could not determine kernel version from filename: ${VMLINUZ}" >&2
+    echo "       Expected a kernel named 'vmlinuz-<version>'." >&2
+    exit 1
+fi
 INITRD="$(find "${ROOTFS_DIR}/boot" -maxdepth 1 -name "initrd.img-${KVER}" -type f 2>/dev/null \
           || find "${ROOTFS_DIR}/boot" -maxdepth 1 -name 'initrd.img*' -type f 2>/dev/null \
           | grep -v '\-rt' | sort -V | tail -n1 || true)"

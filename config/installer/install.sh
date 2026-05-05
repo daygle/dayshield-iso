@@ -14,9 +14,15 @@
 set -euo pipefail
 
 INSTALLER_DIR="/usr/lib/dayshield-installer"
-SQUASHFS_IMG="/live/filesystem.squashfs"
 TARGET_MOUNT="/mnt/target"
 LOG_FILE="/tmp/dayshield-install.log"
+
+# Locate the squashfs on the live medium (path varies by live-boot version)
+SQUASHFS_IMG="$(find /run/live/medium/live /lib/live/mount/medium/live -name 'filesystem.squashfs' 2>/dev/null | head -n1 || true)"
+if [[ -z "${SQUASHFS_IMG}" ]] || [[ ! -f "${SQUASHFS_IMG}" ]]; then
+    echo "[ERROR] Cannot locate filesystem.squashfs on the live medium. Checked: /run/live/medium/live and /lib/live/mount/medium/live" >&2
+    exit 1
+fi
 
 # Redirect output to log
 exec > >(tee -a "${LOG_FILE}") 2>&1
@@ -283,6 +289,8 @@ ln -sf "/etc/systemd/system/firstboot.service" \
 # ---------------------------------------------------------------------------
 # Unmount
 # ---------------------------------------------------------------------------
+info "Syncing filesystems …"
+sync
 info "Unmounting target …"
 umount -R "${TARGET_MOUNT}"
 
