@@ -54,7 +54,10 @@ if [[ -z "${VMLINUZ}" ]]; then
     trap cleanup_kernel_mounts EXIT
 
     chroot "${ROOTFS_DIR}" /bin/sh -c \
-        'apt-get -qq update && apt-get -y --no-install-recommends install linux-image-amd64'
+        'LANG=C LC_ALL=C apt-get -qq update && LANG=C LC_ALL=C apt-get -qq -y \
+            -o APT::Install-Recommends=false \
+            -o APT::Install-Suggests=false \
+            install linux-image-amd64'
 
     cleanup_kernel_mounts
     trap - EXIT
