@@ -14,6 +14,13 @@ set -euo pipefail
 FIRSTBOOT_MARKER="/etc/dayshield/.firstboot"
 LOG_FILE="/var/log/dayshield-firstboot.log"
 
+# Guard: only run once. The marker is created by the installer (finalize step)
+# and removed at the end of this script.
+if [[ ! -f "${FIRSTBOOT_MARKER}" ]]; then
+    echo "==> First-boot marker not present; first-boot already completed. Exiting."
+    exit 0
+fi
+
 exec >> "${LOG_FILE}" 2>&1
 
 echo "==> DayShield first-boot initialisation: $(date -u)"
