@@ -71,8 +71,12 @@ cd ~
 git clone https://github.com/daygle/dayshield-rootfs
 git clone https://github.com/daygle/dayshield-iso
 git clone https://github.com/daygle/dayshield-installer-ui
+git clone https://github.com/daygle/dayshield-ui
 git clone https://github.com/daygle/dayshield-core
 ```
+
+If you want the installed system to serve the management UI, build `dayshield-ui`
+and provide its `dist` output to the rootfs builder.
 
 ---
 
@@ -134,6 +138,22 @@ cd ~/dayshield-rootfs
 make rootfs
 ```
 
+If you want the installed system to serve the Management UI, first build the
+UI in the `dayshield-ui` repository and pass its output directory into the
+rootfs builder:
+
+```sh
+cd ~/dayshield-ui
+npm install
+npm run build
+
+cd ~/dayshield-rootfs
+make rootfs UI_DIR=../dayshield-ui/dist
+```
+
+This copies the built UI into `/usr/local/share/dayshield-ui` inside the
+rootfs, which is the path expected by `dayshield-core`.
+
 This runs mmdebstrap, chroot-setup, installs dayshield-core, enables all
 services, hardens IPv4, and produces:
 
@@ -171,6 +191,11 @@ make iso \
     ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
     INSTALLER_UI=../dayshield-installer-ui/installer-ui
 ```
+
+The `INSTALLER_UI` path is for the live installer UI on the ISO.
+If you also want the installed system to serve the management UI, build
+`dayshield-ui` separately and include it in the rootfs build via
+`UI_DIR=../dayshield-ui/dist`.
 
 This runs the full pipeline (extract -> inject installer UI -> squashfs ->
 kernel -> initrd -> bootloader -> assemble) and produces:
