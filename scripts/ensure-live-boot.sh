@@ -89,7 +89,8 @@ trap cleanup_mounts EXIT
 # live-config                — configures the running live session (hostname,
 #                              autologin, etc.).
 # live-config-systemd        — systemd units for live-config.
-chroot "${ROOTFS_DIR}" /bin/sh -c \
+INIT_LOG="$(mktemp "${BUILD_DIR}/ensure-live-boot-XXXXXX.log")"
+if chroot "${ROOTFS_DIR}" /bin/sh -c \
     'LANG=C LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get -qq update && \
      LANG=C LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get -qq -y \
          -o APT::Install-Recommends=false \
@@ -98,7 +99,17 @@ chroot "${ROOTFS_DIR}" /bin/sh -c \
          live-boot \
          live-boot-initramfs-tools \
          live-config \
-         live-config-systemd'
+         live-config-systemd' >"${INIT_LOG}" 2>&1; then
+    grep -v "Couldn't identify type of root file system .* for fsck hook" "${INIT_LOG}" || true
+else
+    grep -v "Couldn't identify type of root file system .* for fsck hook" "${INIT_LOG}" >&2 || true
+    echo "ERROR: live-boot install failed." >&2
+    cleanup_mounts
+    trap - EXIT
+    rm -f "${INIT_LOG}"
+    exit 1
+fi
+rm -f "${INIT_LOG}"
 
 cleanup_mounts
 trap - EXIT
