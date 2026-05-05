@@ -73,7 +73,8 @@ if [[ -n "${GRUB_I386_LIB}" ]]; then
         fi
     done
     if [[ "${_hybrid_found}" -eq 0 ]]; then
-        echo "WARNING: boot_hybrid.img not found; USB hybrid boot (MBR path) will not work." >&2
+        echo "WARNING: boot_hybrid.img not found in ${GRUB_I386_LIB} or /usr/lib/grub/i386-pc;" >&2
+        echo "         USB hybrid boot (MBR path) will not work." >&2
         echo "         Install grub-pc-bin or grub-common to enable USB booting." >&2
     fi
 
