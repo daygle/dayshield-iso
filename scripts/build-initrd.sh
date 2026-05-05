@@ -163,9 +163,9 @@ HOOK
 
     INITRD_LOG="$(mktemp "${BUILD_DIR}/initrd-mkinitramfs-XXXXXX.log")"
     if chroot "${ROOTFS_DIR}" sh -c "mkinitramfs -o /tmp/initrd.img ${KERNEL_VERSION}" >"${INITRD_LOG}" 2>&1; then
-        sed -E "/^W: Couldn't identify type of root file system .* for fsck hook$/d" "${INITRD_LOG}"
+        grep -v "Couldn't identify type of root file system .* for fsck hook" "${INITRD_LOG}" || true
     else
-        sed -E "/^W: Couldn't identify type of root file system .* for fsck hook$/d" "${INITRD_LOG}" >&2
+        grep -v "Couldn't identify type of root file system .* for fsck hook" "${INITRD_LOG}" >&2 || true
         echo "ERROR: mkinitramfs failed while building initrd." >&2
         cleanup_initrd_mounts
         trap - EXIT
