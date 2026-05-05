@@ -50,6 +50,13 @@ chroot "${TARGET}" grub-install \
     --no-nvram \
     || { echo "ERROR: UEFI grub-install failed — UEFI boot will not work. Aborting." >&2; exit 1; }
 
+# Copy the EFI binary to the UEFI spec fallback path (/EFI/BOOT/BOOTX64.EFI).
+# --no-nvram skips writing an NVRAM boot variable; without the fallback path,
+# firmware that only scans NVRAM or /EFI/BOOT/ will fail to find a boot loader.
+mkdir -p "${TARGET}/boot/efi/EFI/BOOT"
+cp "${TARGET}/boot/efi/EFI/dayshield/grubx64.efi" \
+   "${TARGET}/boot/efi/EFI/BOOT/BOOTX64.EFI"
+
 # ---------------------------------------------------------------------------
 # Write GRUB default configuration
 # ---------------------------------------------------------------------------

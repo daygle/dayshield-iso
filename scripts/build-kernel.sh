@@ -30,6 +30,40 @@ if [[ -z "${VMLINUZ}" ]]; then
                | sort -V | tail -n1 || true)"
 fi
 
+# ---------------------------------------------------------------------------
+# Fallback: install kernel inside chroot if not present
+# ---------------------------------------------------------------------------
+if [[ -z "${VMLINUZ}" ]]; then
+    echo "--> No kernel found in rootfs; installing linux-image via chroot …"
+
+    # Bind-mount essential pseudo-filesystems
+    for _fs in dev dev/pts proc sys run; do
+        mkdir -p "${ROOTFS_DIR}/${_fs}"
+        mount --bind "/${_fs}" "${ROOTFS_DIR}/${_fs}"
+    done
+
+    cleanup_kernel_mounts() {
+        for _fs in run sys proc dev/pts dev; do
+            umount -lf "${ROOTFS_DIR}/${_fs}" 2>/dev/null || true
+        done
+    }
+    trap cleanup_kernel_mounts EXIT
+
+    chroot "${ROOTFS_DIR}" /bin/sh -c \
+        'apt-get -qq update && apt-get -y --no-install-recommends install linux-image-amd64'
+
+    cleanup_kernel_mounts
+    trap - EXIT
+
+    VMLINUZ="$(find "${ROOTFS_DIR}/boot" -maxdepth 1 -name 'vmlinuz*' -type f \
+               | sort -V | tail -n1)"
+fi
+
+if [[ -z "${VMLINUZ}" ]]; then
+    echo "ERROR: Could not locate or install a kernel." >&2
+    exit 1
+fi
+
 KVER="$(basename "${VMLINUZ}" | sed 's/vmlinuz-//')"
 # If KVER equals "vmlinuz" (no suffix stripped) or is empty, it is invalid
 if [[ -z "${KVER}" ]] || [[ "${KVER}" == "vmlinuz" ]]; then
@@ -40,38 +74,6 @@ fi
 INITRD="$(find "${ROOTFS_DIR}/boot" -maxdepth 1 -name "initrd.img-${KVER}" -type f 2>/dev/null \
           || find "${ROOTFS_DIR}/boot" -maxdepth 1 -name 'initrd.img*' -type f 2>/dev/null \
           | grep -v '\-rt' | sort -V | tail -n1 || true)"
-
-# ---------------------------------------------------------------------------
-# Fallback: install kernel inside chroot if not present
-# ---------------------------------------------------------------------------
-if [[ -z "${VMLINUZ}" ]]; then
-    echo "--> No kernel found in rootfs; installing linux-image via chroot …"
-
-    # Bind-mount essential pseudo-filesystems
-    mount --bind /dev  "${ROOTFS_DIR}/dev"
-    mount --bind /proc "${ROOTFS_DIR}/proc"
-    mount --bind /sys  "${ROOTFS_DIR}/sys"
-
-    trap 'umount -lf "${ROOTFS_DIR}/dev" "${ROOTFS_DIR}/proc" "${ROOTFS_DIR}/sys" 2>/dev/null || true' EXIT
-
-    chroot "${ROOTFS_DIR}" /bin/sh -c \
-        'apt-get -qq update && apt-get -y --no-install-recommends install linux-image-amd64'
-
-    umount -lf "${ROOTFS_DIR}/dev"
-    umount -lf "${ROOTFS_DIR}/proc"
-    umount -lf "${ROOTFS_DIR}/sys"
-    trap - EXIT
-
-    VMLINUZ="$(find "${ROOTFS_DIR}/boot" -maxdepth 1 -name 'vmlinuz*' -type f \
-               | sort -V | tail -n1)"
-    INITRD="$(find "${ROOTFS_DIR}/boot" -maxdepth 1 -name 'initrd.img*' -type f \
-              | sort -V | tail -n1 || true)"
-fi
-
-if [[ -z "${VMLINUZ}" ]]; then
-    echo "ERROR: Could not locate or install a kernel." >&2
-    exit 1
-fi
 
 echo "    kernel : ${VMLINUZ}"
 

@@ -111,7 +111,7 @@ trap '_cleanup' EXIT
 
 mount -t squashfs -o loop,ro \
     "${ISO_MOUNT}/live/filesystem.squashfs" "${SQ_MOUNT}" 2>/dev/null
-check "squashfs mounts without error"          test -d "${SQ_MOUNT}"
+check "squashfs mounts without error"          test -f "${SQ_MOUNT}/etc/os-release"
 check "squashfs /bin or /usr/bin is populated" \
     bash -c 'ls "${SQ_MOUNT}/bin" "${SQ_MOUNT}/usr/bin" &>/dev/null'
 check "squashfs /usr/lib/dayshield-installer/install.sh exists" \

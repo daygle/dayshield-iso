@@ -59,11 +59,23 @@ if [[ -n "${GRUB_I386_LIB}" ]]; then
         search_label configfile linux echo all_video gzio part_gpt \
         part_msdos ext2 fat
 
-    # Copy the hybrid MBR boot sector used by xorriso --grub2-mbr
-    if [[ -f "${GRUB_I386_LIB}/boot_hybrid.img" ]]; then
-        cp "${GRUB_I386_LIB}/boot_hybrid.img" "${GRUB_BIOS_DIR}/boot_hybrid.img"
-    elif [[ -f "${GRUB_I386_LIB}/boot.img" ]]; then
-        cp "${GRUB_I386_LIB}/boot.img" "${GRUB_BIOS_DIR}/boot_hybrid.img"
+    # Copy the hybrid MBR boot sector used by xorriso --grub2-mbr.
+    # boot_hybrid.img is the combined MBR/GPT hybrid sector; boot.img is the
+    # plain MBR-only sector and is NOT a valid substitute.
+    _hybrid_found=0
+    for _hybrid_path in \
+            "${GRUB_I386_LIB}/boot_hybrid.img" \
+            /usr/lib/grub/i386-pc/boot_hybrid.img; do
+        if [[ -f "${_hybrid_path}" ]]; then
+            cp "${_hybrid_path}" "${GRUB_BIOS_DIR}/boot_hybrid.img"
+            _hybrid_found=1
+            break
+        fi
+    done
+    if [[ "${_hybrid_found}" -eq 0 ]]; then
+        echo "WARNING: boot_hybrid.img not found in ${GRUB_I386_LIB} or /usr/lib/grub/i386-pc;" >&2
+        echo "         USB hybrid boot (MBR path) will not work." >&2
+        echo "         Install grub-pc-bin or grub-common to enable USB booting." >&2
     fi
 
     echo "    BIOS image: $(du -sh "${GRUB_BIOS_DIR}/bios.img" | cut -f1)"
