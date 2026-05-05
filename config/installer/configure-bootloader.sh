@@ -38,8 +38,8 @@ chroot "${TARGET}" grub-install \
     --target=i386-pc \
     --recheck \
     --no-floppy \
-    "${DISK}" 2>/dev/null || \
-    echo "WARNING: BIOS grub-install failed (BIOS boot may not work)" >&2
+    "${DISK}" || \
+    echo "WARNING: BIOS grub-install failed (BIOS boot may not work on this system)" >&2
 
 echo "--> Installing GRUB (UEFI) …"
 chroot "${TARGET}" grub-install \
@@ -48,8 +48,7 @@ chroot "${TARGET}" grub-install \
     --bootloader-id=dayshield \
     --recheck \
     --no-nvram \
-    2>/dev/null || \
-    echo "WARNING: UEFI grub-install failed (UEFI boot may not work)" >&2
+    || { echo "ERROR: UEFI grub-install failed — UEFI boot will not work. Aborting." >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
 # Write GRUB default configuration

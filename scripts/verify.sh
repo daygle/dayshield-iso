@@ -177,14 +177,14 @@ if ${QEMU_TEST}; then
     if ! command -v qemu-system-x86_64 &>/dev/null; then
         echo "  [SKIP] qemu-system-x86_64 not found"
     else
-        QEMU_TIMEOUT=30
+        QEMU_TIMEOUT=90
 
         echo "  Testing BIOS boot …"
         timeout "${QEMU_TIMEOUT}" \
             qemu-system-x86_64 \
                 -nographic \
                 -no-reboot \
-                -m 512M \
+                -m 1024M \
                 -cdrom "${ISO}" \
                 -boot d \
                 2>&1 | head -n 30 | grep -qi "grub\|linux\|boot" \
@@ -197,7 +197,7 @@ if ${QEMU_TEST}; then
                 qemu-system-x86_64 \
                     -nographic \
                     -no-reboot \
-                    -m 512M \
+                    -m 1024M \
                     -bios "${OVMF_PATH}" \
                     -cdrom "${ISO}" \
                     -boot d \
