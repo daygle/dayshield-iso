@@ -29,7 +29,8 @@ Build host OS: **Debian 13** (or Ubuntu equivalent).
 apt-get install -y \
     xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin \
     dosfstools dracut zstd parted rsync util-linux \
-    mmdebstrap systemd-container
+    mmdebstrap systemd-container \
+    nodejs npm
 ```
 
 **Rust** (for building `dayshield-core`) — install via rustup, not apt:
@@ -38,6 +39,8 @@ apt-get install -y \
 curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain 1.88.0
 source "$HOME/.cargo/env"
 ```
+
+**Node.js / npm** (for building `dayshield-ui` if you want the installed-system UI) — install via the distro package or NodeSource for Node 18+.
 
 See the [Build host packages](#build-host-packages) table for full details.
 
@@ -55,11 +58,14 @@ from scratch on a Debian 13 build host.  Follow these phases in order.
 ```sh
 # Install all required build tools
 apt-get update
-apt-get install -y git curl gcc make build-essential mmdebstrap zstd systemd-container xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin dosfstools dracut dracut-live util-linux parted rsync qemu-system-x86 ovmf
+apt-get install -y git curl gcc make build-essential mmdebstrap zstd systemd-container xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin dosfstools dracut dracut-live util-linux parted rsync qemu-system-x86 ovmf nodejs npm
 
 # Install Rust via rustup (do NOT install rustc/cargo/rustup from apt)
 curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain 1.88.0
 source "$HOME/.cargo/env"
+
+# Install Node if you need to build the management UI
+# Node 18+ is required for `dayshield-ui` build output.
 ```
 
 ---
