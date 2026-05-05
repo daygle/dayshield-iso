@@ -151,7 +151,9 @@ HOOK
         if lsinitramfs "${KERNEL_DIR}/initrd.img" 2>/dev/null | grep -qE 'scripts/live|lib/live'; then
             echo "--> live-boot scripts confirmed in initrd."
         else
-            echo "WARNING: live-boot scripts not found in initrd; ISO may not boot." >&2
+            echo "ERROR: live-boot scripts not found in initrd; ISO will not boot." >&2
+            echo "       Ensure that ensure-live-boot.sh ran successfully before build-initrd.sh." >&2
+            exit 1
         fi
     fi
 
