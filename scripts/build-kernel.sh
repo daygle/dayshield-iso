@@ -36,14 +36,18 @@ fi
 if [[ -z "${VMLINUZ}" ]]; then
     echo "--> No kernel found in rootfs; installing linux-image via chroot …"
 
+    # Ensure /tmp exists inside the rootfs for apt/dpkg temporary files.
+    mkdir -p "${ROOTFS_DIR}/tmp"
+    chmod 1777 "${ROOTFS_DIR}/tmp"
+
     # Bind-mount essential pseudo-filesystems
-    for _fs in dev dev/pts proc sys run; do
+    for _fs in dev dev/pts proc sys run tmp; do
         mkdir -p "${ROOTFS_DIR}/${_fs}"
         mount --bind "/${_fs}" "${ROOTFS_DIR}/${_fs}"
     done
 
     cleanup_kernel_mounts() {
-        for _fs in run sys proc dev/pts dev; do
+        for _fs in tmp run sys proc dev/pts dev; do
             umount -lf "${ROOTFS_DIR}/${_fs}" 2>/dev/null || true
         done
     }

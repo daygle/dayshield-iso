@@ -147,19 +147,31 @@ HOOK
     # Bind-mount pseudo-filesystems so mkinitramfs hooks can read /proc/modules,
     # /sys (udev rules), /dev/null, etc.  Mirror the pattern used in
     # ensure-live-boot.sh and configure-bootloader.sh.
-    for _fs in dev dev/pts proc sys run; do
+    mkdir -p "${ROOTFS_DIR}/tmp"
+    chmod 1777 "${ROOTFS_DIR}/tmp"
+    for _fs in dev dev/pts proc sys run tmp; do
         mkdir -p "${ROOTFS_DIR}/${_fs}"
         mount --bind "/${_fs}" "${ROOTFS_DIR}/${_fs}"
     done
 
     cleanup_initrd_mounts() {
-        for _fs in run sys proc dev/pts dev; do
+        for _fs in tmp run sys proc dev/pts dev; do
             umount -lf "${ROOTFS_DIR}/${_fs}" 2>/dev/null || true
         done
     }
     trap cleanup_initrd_mounts EXIT
 
-    chroot "${ROOTFS_DIR}" mkinitramfs -o /tmp/initrd.img "${KERNEL_VERSION}"
+    INITRD_LOG="$(mktemp --tmpdir=initrd-mkinitramfs-XXXXXX.log)"
+    if chroot "${ROOTFS_DIR}" sh -c "mkinitramfs -o /tmp/initrd.img ${KERNEL_VERSION}" >"${INITRD_LOG}" 2>&1; then
+        sed -E "/^W: Couldn't identify type of root file system .* for fsck hook$/d" "${INITRD_LOG}"
+    else
+        sed -E "/^W: Couldn't identify type of root file system .* for fsck hook$/d" "${INITRD_LOG}" >&2
+        echo "ERROR: mkinitramfs failed while building initrd." >&2
+        cleanup_initrd_mounts
+        trap - EXIT
+        exit 1
+    fi
+    rm -f "${INITRD_LOG}"
 
     cleanup_initrd_mounts
     trap - EXIT
