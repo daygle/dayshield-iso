@@ -38,9 +38,11 @@ done
 # ---------------------------------------------------------------------------
 echo "--> Copying GRUB configuration …"
 cp "${CONFIG_DIR}/grub.cfg" "${GRUB_BIOS_DIR}/grub.cfg"
-# Copy splash image if present
+# Copy splash image and optional font if present
 [[ -f "${CONFIG_DIR}/splash.png" ]] && \
     cp "${CONFIG_DIR}/splash.png" "${GRUB_BIOS_DIR}/splash.png"
+[[ -f "${CONFIG_DIR}/unicode.pf2" ]] && \
+    cp "${CONFIG_DIR}/unicode.pf2" "${GRUB_BIOS_DIR}/unicode.pf2"
 
 # ---------------------------------------------------------------------------
 # BIOS: build core.img + embed into bios.img
@@ -56,8 +58,8 @@ if [[ -n "${GRUB_I386_LIB}" ]]; then
         --format="i386-pc-eltorito" \
         --compression="auto" \
         biosdisk iso9660 normal search search_fs_file \
-        search_label configfile linux echo all_video gzio part_gpt \
-        part_msdos ext2 fat
+        search_label configfile linux echo all_video gfxterm png font \
+        gzio part_gpt part_msdos ext2 fat
 
     # Copy the hybrid MBR boot sector used by xorriso --grub2-mbr.
     # boot_hybrid.img is the combined MBR/GPT hybrid sector; boot.img is the

@@ -84,6 +84,8 @@ fi
     cp "${BOOT_DIR}/boot/grub/core.img" "${ISO_ROOT}/boot/grub/core.img"
 [[ -f "${BOOT_DIR}/boot/grub/splash.png" ]] && \
     cp "${BOOT_DIR}/boot/grub/splash.png" "${ISO_ROOT}/boot/grub/splash.png"
+[[ -f "${BOOT_DIR}/boot/grub/unicode.pf2" ]] && \
+    cp "${BOOT_DIR}/boot/grub/unicode.pf2" "${ISO_ROOT}/boot/grub/unicode.pf2"
 
 # Copy any GRUB locale/module directories that may be present
 for sub in fonts locale i386-pc x86_64-efi; do
