@@ -78,7 +78,13 @@ check "live/filesystem.squashfs exists"    test -f "${ISO_MOUNT}/live/filesystem
 check "boot/vmlinuz exists"                test -f "${ISO_MOUNT}/boot/vmlinuz"
 check "boot/initrd.img exists"             test -f "${ISO_MOUNT}/boot/initrd.img"
 check "boot/grub/grub.cfg exists"          test -f "${ISO_MOUNT}/boot/grub/grub.cfg"
-check "boot/grub/bios.img exists"          test -f "${ISO_MOUNT}/boot/grub/bios.img"
+# bios.img is optional for UEFI-only ISOs (grub-i386-pc absent at build time).
+if test -f "${ISO_MOUNT}/boot/grub/bios.img"; then
+    check "boot/grub/bios.img is non-empty (BIOS boot available)" \
+        test -s "${ISO_MOUNT}/boot/grub/bios.img"
+else
+    echo "  [INFO] boot/grub/bios.img absent — UEFI-only ISO"
+fi
 check "EFI/BOOT/BOOTX64.EFI exists"        test -f "${ISO_MOUNT}/EFI/BOOT/BOOTX64.EFI"
 check "EFI/BOOT/BOOTX64.EFI is non-empty"  test -s "${ISO_MOUNT}/EFI/BOOT/BOOTX64.EFI"
 check "EFI/BOOT/BOOTX64.EFI is PE32+ EFI" \
@@ -108,6 +114,12 @@ mount -t squashfs -o loop,ro \
 check "squashfs mounts without error"          test -d "${SQ_MOUNT}"
 check "squashfs /bin or /usr/bin is populated" \
     bash -c 'ls "${SQ_MOUNT}/bin" "${SQ_MOUNT}/usr/bin" &>/dev/null'
+check "squashfs /usr/lib/dayshield-installer/install.sh exists" \
+    test -f "${SQ_MOUNT}/usr/lib/dayshield-installer/install.sh"
+check "squashfs /usr/lib/dayshield-installer/firstboot-run.sh exists" \
+    test -f "${SQ_MOUNT}/usr/lib/dayshield-installer/firstboot-run.sh"
+check "squashfs /installer-ui/index.html exists" \
+    test -f "${SQ_MOUNT}/installer-ui/index.html"
 umount "${SQ_MOUNT}" && rm -rf "${SQ_MOUNT}"
 
 # ---------------------------------------------------------------------------
@@ -127,12 +139,15 @@ echo "--- Boot metadata ---"
 if command -v xorriso &>/dev/null; then
     ELTORITO_TMP="$(mktemp)"
     xorriso -indev "${ISO}" -report_el_torito plain 2>/dev/null > "${ELTORITO_TMP}" || true
-    if check "El Torito report contains BIOS boot image" \
-           grep -q 'bios\.img' "${ELTORITO_TMP}"; then
-        true
-    fi
     if check "El Torito report contains UEFI boot image" \
            grep -Eq 'El Torito boot img.*UEFI|efiboot\.img' "${ELTORITO_TMP}"; then
+        true
+    fi
+    # BIOS El Torito entry is optional for UEFI-only ISOs.
+    if ! test -f "${ISO_MOUNT}/boot/grub/bios.img"; then
+        echo "  [INFO] Skipping BIOS El Torito check (UEFI-only ISO — bios.img absent)"
+    elif check "El Torito report contains BIOS boot image" \
+           grep -q 'bios\.img' "${ELTORITO_TMP}"; then
         true
     fi
     if [[ ${FAIL} -gt 0 ]]; then

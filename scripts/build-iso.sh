@@ -110,6 +110,11 @@ run_step extract-rootfs.sh  --rootfs "${ROOTFS}"
 # Inject installer UI files into the live rootfs before squashfs is built
 run_step inject-installer-ui.sh --installer-ui "${INSTALLER_UI_DIR}"
 
+# Embed CLI installer scripts into the live rootfs BEFORE the squashfs is
+# frozen.  This ensures /usr/lib/dayshield-installer/ is present in the live
+# session after switch_root so that install.sh and firstboot-run.sh are found.
+run_step embed-installer-scripts.sh
+
 # Ensure live-boot / live-config are present in the live rootfs so that:
 #   1. The squashfs contains the live-boot scripts needed by the live session.
 #   2. mkinitramfs (build-initrd.sh) can include the live-boot initramfs hook.

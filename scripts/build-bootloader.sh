@@ -68,10 +68,10 @@ if [[ -n "${GRUB_I386_LIB}" ]]; then
 
     echo "    BIOS image: $(du -sh "${GRUB_BIOS_DIR}/bios.img" | cut -f1)"
 else
-    echo "WARNING: grub-i386-pc modules not found; BIOS boot may not work." >&2
-    # Create a dummy placeholder so assemble-iso.sh does not fail
-    dd if=/dev/zero bs=512 count=2 of="${GRUB_BIOS_DIR}/bios.img" 2>/dev/null
-    touch "${GRUB_BIOS_DIR}/boot_hybrid.img"
+    echo "WARNING: grub-i386-pc modules not found; BIOS boot will NOT be available." >&2
+    echo "         A UEFI-only ISO will be produced." >&2
+    # Write a sentinel so assemble-iso.sh knows to omit the BIOS El Torito entry.
+    touch "${GRUB_BIOS_DIR}/.bios-boot-unavailable"
 fi
 
 # ---------------------------------------------------------------------------

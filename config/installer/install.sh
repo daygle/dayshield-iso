@@ -246,20 +246,15 @@ for _unit_dir in /lib/systemd/system /usr/lib/systemd/system; do
     fi
 done
 
-for _unit_dir in /lib/systemd/system /usr/lib/systemd/system; do
-    if [[ -f "${TARGET_MOUNT}${_unit_dir}/systemd-resolved.service" ]]; then
-        ln -sf "${_unit_dir}/systemd-resolved.service" \
-            "${SYSTEMD_DIR}/multi-user.target.wants/systemd-resolved.service" || true
-        break
-    fi
-done
+# Mask systemd-resolved; the installed system uses unbound (port 53) as its
+# DNS resolver.  Enabling both would cause a port-53 conflict on first boot.
+ln -sf /dev/null "${SYSTEMD_DIR}/systemd-resolved.service" 2>/dev/null || true
 
-# Point resolv.conf at systemd-resolved's stub resolver.  The target path is
-# a symlink; /run/systemd/resolve/resolv.conf is populated at runtime by
-# systemd-resolved.  Remove any pre-existing regular file first so that ln -sf
-# succeeds regardless of whether the rootfs shipped a plain file or a symlink.
+# Point resolv.conf at 127.0.0.1 (unbound listening on all interfaces).
+# systemd-resolved is masked above so its stub resolver at
+# /run/systemd/resolve/resolv.conf is never populated; a plain file is safer.
 rm -f "${TARGET_MOUNT}/etc/resolv.conf"
-ln -sf /run/systemd/resolve/resolv.conf "${TARGET_MOUNT}/etc/resolv.conf"
+printf 'nameserver 127.0.0.1\n' > "${TARGET_MOUNT}/etc/resolv.conf"
 
 # ---------------------------------------------------------------------------
 # Firstboot marker
