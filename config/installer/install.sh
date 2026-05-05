@@ -117,6 +117,9 @@ fi
 # ---------------------------------------------------------------------------
 # Format
 # ---------------------------------------------------------------------------
+[[ -b "${EFI_PART}" ]]  || error "EFI partition device not found: ${EFI_PART}"
+[[ -b "${ROOT_PART}" ]] || error "Root partition device not found: ${ROOT_PART}"
+
 info "Formatting EFI partition: ${EFI_PART}"
 mkfs.fat -F 32 -n "EFI" "${EFI_PART}"
 
@@ -154,6 +157,7 @@ cleanup_chroot_mounts() {
 trap cleanup_chroot_mounts EXIT
 
 info "Purging live-boot / live-config packages from target …"
+chroot "${TARGET_MOUNT}" /bin/sh -c 'dpkg --configure -a 2>/dev/null || true'
 chroot "${TARGET_MOUNT}" /bin/sh -c \
     'DEBIAN_FRONTEND=noninteractive apt-get -y --purge remove \
         live-boot live-boot-initramfs-tools \

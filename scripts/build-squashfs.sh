@@ -25,7 +25,7 @@ rm -f "${SQUASHFS_IMG}"
 #   -Xcompression-level 19   - maximum zstd compression
 #   -noappend                - overwrite if exists
 #   -all-root                - force uid/gid 0:0 for all files
-#   -no-xattrs               - exclude extended attributes (not needed for live)
+#   -xattrs                  - preserve extended attributes (POSIX capabilities etc.)
 #   -no-fragments            - disable tail-end packing (reproducibility)
 #   -root-owned              - alias for -all-root (some versions)
 #   -mkfs-time 0             - set filesystem creation timestamp to epoch
@@ -37,7 +37,7 @@ mksquashfs \
     -Xcompression-level 19 \
     -noappend \
     -all-root \
-    -no-xattrs \
+    -xattrs \
     -no-fragments \
     -mkfs-time 0 \
     -wildcards \
