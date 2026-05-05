@@ -43,19 +43,23 @@ _pkg_installed() {
         | grep -q "install ok installed"
 }
 
+_normalize_live_fstab() {
+    # Live ISO boots from live-boot/overlay, not the installed root label.
+    # Keep fstab intentionally empty in the live squashfs to avoid mount-unit
+    # generation conflicts (e.g. "Failed to create unit file ..." warnings).
+    cat > "${ROOTFS_DIR}/etc/fstab" <<'EOF'
+# /etc/fstab - live installer runtime
+# Intentionally minimal. Installed target fstab is generated during install.
+EOF
+}
+
 if _pkg_installed live-boot-initramfs-tools && _pkg_installed live-config; then
     echo "--> live-boot already present in rootfs; nothing to do."
+    _normalize_live_fstab
     exit 0
 fi
 
 echo "--> live-boot / live-config not found in live rootfs; installing …"
-
-# ---------------------------------------------------------------------------
-# Ensure /tmp exists and is writable inside the rootfs.
-# Some chrooted apt operations need a writable /tmp directory.
-# ---------------------------------------------------------------------------
-mkdir -p "${ROOTFS_DIR}/tmp"
-chmod 1777 "${ROOTFS_DIR}/tmp"
 
 # ---------------------------------------------------------------------------
 # Ensure /tmp exists and is writable inside the rootfs.
@@ -113,5 +117,7 @@ rm -f "${INIT_LOG}"
 
 cleanup_mounts
 trap - EXIT
+
+_normalize_live_fstab
 
 echo "--> live-boot / live-config installed in live rootfs."
