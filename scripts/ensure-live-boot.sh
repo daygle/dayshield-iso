@@ -51,15 +51,29 @@ fi
 echo "--> live-boot / live-config not found in live rootfs; installing …"
 
 # ---------------------------------------------------------------------------
+# Ensure /tmp exists and is writable inside the rootfs.
+# Some chrooted apt operations need a writable /tmp directory.
+# ---------------------------------------------------------------------------
+mkdir -p "${ROOTFS_DIR}/tmp"
+chmod 1777 "${ROOTFS_DIR}/tmp"
+
+# ---------------------------------------------------------------------------
+# Ensure /tmp exists and is writable inside the rootfs.
+# Some chrooted apt operations need a writable /tmp directory.
+# ---------------------------------------------------------------------------
+mkdir -p "${ROOTFS_DIR}/tmp"
+chmod 1777 "${ROOTFS_DIR}/tmp"
+
+# ---------------------------------------------------------------------------
 # Bind-mount pseudo-filesystems so apt / dpkg work inside the chroot
 # ---------------------------------------------------------------------------
-for _fs in dev dev/pts proc sys run; do
+for _fs in dev dev/pts proc sys run tmp; do
     mkdir -p "${ROOTFS_DIR}/${_fs}"
     mount --bind "/${_fs}" "${ROOTFS_DIR}/${_fs}"
 done
 
 cleanup_mounts() {
-    for _fs in run sys proc dev/pts dev; do
+    for _fs in tmp run sys proc dev/pts dev; do
         umount -lf "${ROOTFS_DIR}/${_fs}" 2>/dev/null || true
     done
 }
