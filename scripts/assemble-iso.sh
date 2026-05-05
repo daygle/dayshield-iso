@@ -77,7 +77,9 @@ cp "${KERNEL_DIR}/initrd.img"     "${ISO_ROOT}/boot/initrd.img"
 
 # GRUB BIOS boot files
 cp "${BOOT_DIR}/boot/grub/grub.cfg"  "${ISO_ROOT}/boot/grub/grub.cfg"
-cp "${BOOT_DIR}/boot/grub/bios.img"  "${ISO_ROOT}/boot/grub/bios.img"
+if [[ ! -f "${BOOT_DIR}/boot/grub/.bios-boot-unavailable" ]]; then
+    cp "${BOOT_DIR}/boot/grub/bios.img"  "${ISO_ROOT}/boot/grub/bios.img"
+fi
 [[ -f "${BOOT_DIR}/boot/grub/core.img" ]] && \
     cp "${BOOT_DIR}/boot/grub/core.img" "${ISO_ROOT}/boot/grub/core.img"
 [[ -f "${BOOT_DIR}/boot/grub/splash.png" ]] && \
@@ -138,6 +140,23 @@ if [[ -f "${EFI_PART_IMG}" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# BIOS El Torito boot entry (omitted when grub-i386-pc was unavailable)
+# ---------------------------------------------------------------------------
+BIOS_ELTORITO_ARGS=()
+if [[ ! -f "${BOOT_DIR}/boot/grub/.bios-boot-unavailable" ]]; then
+    BIOS_ELTORITO_ARGS=(
+        -eltorito-boot    "boot/grub/bios.img"
+        -eltorito-catalog "boot/grub/boot.cat"
+        -no-emul-boot
+        -boot-load-size 4
+        -boot-info-table
+        --grub2-boot-info
+    )
+else
+    echo "INFO: Omitting BIOS El Torito entry (grub-i386-pc was unavailable at build time)."
+fi
+
+# ---------------------------------------------------------------------------
 # Assemble the ISO with xorriso
 # ---------------------------------------------------------------------------
 echo "--> Running xorriso …"
@@ -152,13 +171,8 @@ xorriso -as mkisofs \
     -volid "DAYSHIELD" \
     -publisher "DayShield Project" \
     -appid "DayShield Firewall OS Installer" \
-    -eltorito-boot   "boot/grub/bios.img" \
-    -eltorito-catalog "boot/grub/boot.cat" \
-    -no-emul-boot \
-    -boot-load-size 4 \
-    -boot-info-table \
-    --grub2-boot-info \
-    "${XORRISO_EXTRA_ARGS[@]}" \
+    ${BIOS_ELTORITO_ARGS[@]+"${BIOS_ELTORITO_ARGS[@]}"} \
+    ${XORRISO_EXTRA_ARGS[@]+"${XORRISO_EXTRA_ARGS[@]}"} \
     -output "${OUTPUT}" \
     "${ISO_ROOT}"
 

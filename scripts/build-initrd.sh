@@ -5,7 +5,9 @@
 # The generated initrd:
 #   • uses mkinitramfs chrooted inside the live rootfs (live-boot / BOOT=live)
 #   • includes the live-boot hooks installed by ensure-live-boot.sh
-#   • embeds installer scripts into /usr/lib/dayshield-installer/
+#   • copies installer scripts into /usr/lib/dayshield-installer/ as a guard
+#     (embed-installer-scripts.sh is the primary embedding step, run before
+#      build-squashfs.sh so the scripts also appear inside the squashfs image)
 #
 # Set USE_DRACUT=1 to opt into the dracut path instead of mkinitramfs.
 
@@ -42,7 +44,9 @@ KERNEL_VERSION="${KVER}"
 echo "--> Building initrd (kernel: ${KERNEL_VERSION:-unknown}) …"
 
 # ---------------------------------------------------------------------------
-# Embed installer scripts into the ROOTFS (so mkinitramfs can see them)
+# Ensure installer scripts are present in the rootfs for the mkinitramfs hook.
+# NOTE: embed-installer-scripts.sh already placed these before build-squashfs,
+# so this step is now a belt-and-suspenders guard for out-of-order invocations.
 # ---------------------------------------------------------------------------
 INSTALLER_EMBED_DIR="${ROOTFS_DIR}/usr/lib/dayshield-installer"
 mkdir -p "${INSTALLER_EMBED_DIR}"
