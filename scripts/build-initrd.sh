@@ -145,17 +145,17 @@ HOOK
     fi
 
     # Bind-mount pseudo-filesystems so mkinitramfs hooks can read /proc/modules,
-    # /sys (udev rules), /dev/null, etc.  Mirror the pattern used in
-    # ensure-live-boot.sh and configure-bootloader.sh.
+    # /sys (udev rules), /dev/null, etc.  /tmp must remain inside the rootfs so
+    # the generated initrd is written into the rootfs tree.
     mkdir -p "${ROOTFS_DIR}/tmp"
     chmod 1777 "${ROOTFS_DIR}/tmp"
-    for _fs in dev dev/pts proc sys run tmp; do
+    for _fs in dev dev/pts proc sys run; do
         mkdir -p "${ROOTFS_DIR}/${_fs}"
         mount --bind "/${_fs}" "${ROOTFS_DIR}/${_fs}"
     done
 
     cleanup_initrd_mounts() {
-        for _fs in tmp run sys proc dev/pts dev; do
+        for _fs in run sys proc dev/pts dev; do
             umount -lf "${ROOTFS_DIR}/${_fs}" 2>/dev/null || true
         done
     }
