@@ -5,6 +5,12 @@ After=local-fs.target network-online.target
 Wants=network-online.target
 Requires=local-fs.target
 ConditionPathExists=/etc/dayshield/.firstboot
+# Explicitly skip when running inside the live installer environment.
+# The live ISO kernel command line always contains "installer"; the installed
+# system's grub-mkconfig-generated config does not.  This guard prevents
+# firstboot from ever running during live boot even if the .firstboot marker
+# were accidentally present inside the squashfs.
+ConditionKernelCommandLine=!installer
 
 [Service]
 Type=oneshot
