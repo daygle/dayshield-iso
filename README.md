@@ -34,14 +34,14 @@ apt-get install -y \
     shellcheck
 ```
 
-**Rust** (for building `dayshield-core`) — install via rustup, not apt:
+**Rust** (for building `dayshield-core`) - install via rustup, not apt:
 
 ```sh
 curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain 1.88.0
 source "$HOME/.cargo/env"
 ```
 
-**Node.js / npm** (for building `dayshield-ui` if you want the installed-system UI) — install via the distro package or NodeSource for Node 18+.
+**Node.js / npm** (for building `dayshield-ui` if you want the installed-system UI) - install via the distro package or NodeSource for Node 18+.
 
 See the [Build host packages](#build-host-packages) table for full details.
 
@@ -245,9 +245,9 @@ make verify ISO=dayshield.iso
 ### Iterative rebuilds (no snapshot revert needed)
 
 You do not need to revert your build VM to a snapshot between ISO builds.
-The build is self-cleaning — just run `make clean` before rebuilding.
+The build is self-cleaning - just run `make clean` before rebuilding.
 
-**Changed only installer UI files** (scripts, HTML, JS — not `packages.txt`):
+**Changed only installer UI files** (scripts, HTML, JS - not `packages.txt`):
 
 ```sh
 cd ~/dayshield-iso
@@ -258,7 +258,7 @@ make iso \
 ```
 
 `make clean` removes the intermediate `build/` directory only.
-The existing `rootfs.tar.zst` is reused as-is — no rootfs rebuild needed.
+The existing `rootfs.tar.zst` is reused as-is - no rootfs rebuild needed.
 
 **Changed rootfs files** (`packages.txt`, service units, scripts):
 
