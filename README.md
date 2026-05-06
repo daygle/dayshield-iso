@@ -198,6 +198,13 @@ make iso \
     INSTALLER_UI=../dayshield-installer-ui/installer-ui
 ```
 
+This build now also writes checksum files next to the ISO:
+
+```sh
+dayshield.iso.sha256
+dayshield.iso.md5
+```
+
 The `INSTALLER_UI` path is for the live installer UI on the ISO.
 If you also want the installed system to serve the management UI, build
 `dayshield-ui` separately and include it in the rootfs build via
