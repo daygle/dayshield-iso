@@ -57,9 +57,13 @@ if [[ ! -f "${ROOTFS}" ]]; then
     exit 1
 fi
 
-# Resolve to absolute path
+# Resolve paths to absolute paths.
 ROOTFS="$(realpath "${ROOTFS}")"
-OUTPUT="$(realpath "${OUTPUT}")"
+OUTPUT_DIR="$(dirname "${OUTPUT}")"
+if [[ "${OUTPUT_DIR}" != "." ]] && [[ ! -d "${OUTPUT_DIR}" ]]; then
+    mkdir -p "${OUTPUT_DIR}"
+fi
+OUTPUT="$(cd "${OUTPUT_DIR}" && pwd -P)/$(basename "${OUTPUT}")"
 
 # ---------------------------------------------------------------------------
 # Build directory (deterministic structure inside working directory)
