@@ -125,31 +125,6 @@ cp target/release/dayshield-core ~/dayshield-rootfs/dayshield-core
 
 ---
 
-### Phase 4 - Verify offline UI bundles
-
-The installer UI is fully offline. Alpine and Tailwind runtime bundles are now
-vendored in the installer-ui repository and should already be present after
-clone/pull.
-
-Required files:
-
-```sh
-ls -l ~/dayshield-installer-ui/installer-ui/alpine.min.js \
-      ~/dayshield-installer-ui/installer-ui/tailwind.min.js
-```
-
-If you need to refresh them manually, run:
-
-```sh
-curl -Lo ~/dayshield-installer-ui/installer-ui/alpine.min.js \
-  "https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"
-
-curl -Lo ~/dayshield-installer-ui/installer-ui/tailwind.min.js \
-  "https://cdn.tailwindcss.com"
-```
-
----
-
 ### Phase 5 - Build the root filesystem
 
 ```sh
@@ -611,9 +586,11 @@ make iso \
 
 ### Alpine.js bundle (required for installer UI)
 
-The installer UI uses Alpine.js for reactivity. Because the ISO is fully
-offline, the bundle must be present at
-`installer-ui/alpine.min.js` **before** the ISO build:
+The installer UI repo includes the required offline Alpine and Tailwind
+runtime bundles at `installer-ui/alpine.min.js` and
+`installer-ui/tailwind.min.js`.
+
+If you want to refresh them manually, run:
 
 ```sh
 curl -Lo ../dayshield-installer-ui/installer-ui/alpine.min.js \
