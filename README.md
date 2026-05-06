@@ -125,7 +125,7 @@ cp target/release/dayshield-core ~/dayshield-rootfs/dayshield-core
 
 ---
 
-### Phase 5 - Build the root filesystem
+### Phase 4 - Build the root filesystem
 
 ```sh
 cd ~/dayshield-rootfs
@@ -176,7 +176,7 @@ All checks should exit `[PASS]`.  The script validates:
 
 ---
 
-### Phase 6 - Build the ISO
+### Phase 5 - Build the ISO
 
 ```sh
 cd ~/dayshield-iso
@@ -270,7 +270,7 @@ make iso \
 
 ---
 
-### Phase 7 - Boot the ISO in QEMU
+### Phase 6 - Boot the ISO in QEMU
 
 ```sh
 # BIOS mode
@@ -307,7 +307,7 @@ launched on tty1.
 
 ---
 
-### Phase 8 - Run the installer
+### Phase 7 - Run the installer
 
 The installer web UI starts automatically.  It is bound to
 `0.0.0.0:8443` and is accessible from tty1 (if a supported browser is
@@ -331,7 +331,7 @@ Installation steps:
 
 ---
 
-### Phase 9 - First boot validation
+### Phase 8 - First boot validation
 
 After installation and reboot:
 
