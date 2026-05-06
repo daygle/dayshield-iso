@@ -162,7 +162,7 @@ HOOK
     trap cleanup_initrd_mounts EXIT
 
     INITRD_LOG="$(mktemp "${BUILD_DIR}/initrd-mkinitramfs-XXXXXX.log")"
-    if chroot "${ROOTFS_DIR}" sh -c "mkinitramfs -o /tmp/initrd.img ${KERNEL_VERSION}" >"${INITRD_LOG}" 2>&1; then
+    if chroot "${ROOTFS_DIR}" /bin/sh -c 'mkinitramfs -o /tmp/initrd.img "$1"' -- "${KERNEL_VERSION}" >"${INITRD_LOG}" 2>&1; then
         grep -v "Couldn't identify type of root file system .* for fsck hook" "${INITRD_LOG}" || true
     else
         grep -v "Couldn't identify type of root file system .* for fsck hook" "${INITRD_LOG}" >&2 || true

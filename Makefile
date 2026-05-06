@@ -13,9 +13,12 @@ OUTPUT       ?= dayshield.iso
 ARCH         ?= amd64
 INSTALLER_UI ?= ../dayshield-installer-ui/installer-ui
 
+SHELLCHECK   ?= shellcheck
+SHELLCHECK_FILES := $(shell find scripts config -name '*.sh' | sort)
+
 SCRIPTS_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))scripts
 
-.PHONY: iso verify clean help
+.PHONY: iso verify verify-qemu clean distclean lint help
 
 ##@ Main targets
 
@@ -61,6 +64,13 @@ clean: ## Remove intermediate build artefacts
 	@echo "==> Cleaning build artefacts …"
 	rm -rf build/
 	@echo "==> Done."
+
+lint: ## Run ShellCheck on all shell scripts
+	@command -v $(SHELLCHECK) >/dev/null 2>&1 || { \
+	  echo "ERROR: $(SHELLCHECK) not found. Install shellcheck to run lint." >&2; \
+	  exit 1; \
+	}
+	@$(SHELLCHECK) $(SHELLCHECK_FILES)
 
 distclean: clean ## Remove build artefacts AND the generated ISO
 	rm -f "$(OUTPUT)"

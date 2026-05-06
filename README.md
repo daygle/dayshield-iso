@@ -30,7 +30,8 @@ apt-get install -y \
     xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin \
     dosfstools dracut zstd parted rsync util-linux \
     mmdebstrap systemd-container \
-    nodejs npm
+    nodejs npm \
+    shellcheck
 ```
 
 **Rust** (for building `dayshield-core`) — install via rustup, not apt:
@@ -43,6 +44,18 @@ source "$HOME/.cargo/env"
 **Node.js / npm** (for building `dayshield-ui` if you want the installed-system UI) — install via the distro package or NodeSource for Node 18+.
 
 See the [Build host packages](#build-host-packages) table for full details.
+
+Optional development tool:
+
+```sh
+shellcheck
+```
+
+Run linting with:
+
+```sh
+make lint
+```
 
 ---
 
