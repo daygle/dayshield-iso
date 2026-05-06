@@ -368,14 +368,9 @@ systemctl status nftables
 systemctl status suricata
 systemctl status crowdsec
 systemctl status ssh
-
-# The dayshield-core API listens on port 3000 (not 8080)
-# Access the management UI from your host browser:
-http://<vm-ip>:3000
 ```
 
 > **Port note:** port `8080` is the installer UI (live ISO only).
-> The `dayshield-core` REST API and management UI run on port **3000**.
 
 ---
 
