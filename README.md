@@ -335,7 +335,7 @@ launched on tty1.
 ### Phase 8 - Run the installer
 
 The installer web UI starts automatically.  It is bound to
-`0.0.0.0:8080` and is accessible from tty1 (if a supported browser is
+`0.0.0.0:8443` and is accessible from tty1 (if a supported browser is
 available) or from another machine on the same network.
 
 Installation steps:
@@ -370,7 +370,7 @@ systemctl status crowdsec
 systemctl status ssh
 ```
 
-> **Port note:** port `8080` is the installer UI (live ISO only).
+> **Port note:** port `8443` is the installer UI (live ISO only).
 
 ---
 
@@ -549,7 +549,7 @@ Boot the ISO in a VM or on bare metal.  When the `installer` kernel parameter
 is present (the default in all boot menu entries), the live environment
 automatically starts the **web-based installer UI**:
 
-- `installer-ui-web.service` - serves the installer on `http://0.0.0.0:8080`
+- `installer-ui-web.service` - serves the installer on `http://0.0.0.0:8443`
   (auto-enabled in `multi-user.target`)
 - `installer-ui.service` - opens a browser on `tty1` pointing at the above URL
   (not auto-enabled by default, to avoid VM consoles appearing unresponsive
@@ -558,7 +558,7 @@ automatically starts the **web-based installer UI**:
 Browser launch order if `installer-ui.service` is manually started on tty1:
 `epiphany-browser`, `firefox`, `chromium`, `surf`, then `midori`. If none are
 installed, the service prints instructions to open the installer from another
-machine at `http://<live-ip>:8080/`.
+machine at `http://<live-ip>:8443/`.
 
 ### Web UI installation flow
 
