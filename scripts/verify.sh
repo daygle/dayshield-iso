@@ -76,6 +76,8 @@ qemu_output_has_boot_markers() {
 ISO_MOUNT="$(mktemp -d)"
 mount -o loop,ro "${ISO}" "${ISO_MOUNT}"
 _cleanup() {
+    # Preserve the script's original exit status: trap handlers run on EXIT and
+    # should only clean resources, not replace success/failure semantics.
     umount "${SQ_MOUNT:-}" 2>/dev/null || true
     rm -rf  "${SQ_MOUNT:-}" 2>/dev/null || true
     umount "${ISO_MOUNT}" 2>/dev/null || true

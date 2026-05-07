@@ -315,7 +315,11 @@ printf 'nameserver 127.0.0.1\n' > "${TARGET_MOUNT}/etc/resolv.conf"
 # Hostname and root password configuration
 # ---------------------------------------------------------------------------
 HOSTNAME_VALUE="${DAYSHIELD_HOSTNAME:-dayshield}"
-if [[ ! "${HOSTNAME_VALUE}" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]{0,62}$ ]]; then
+# RFC 1123-ish hostname validation:
+# - labels are alnum plus interior hyphens
+# - each label <=63 chars
+# - labels separated by dots
+if [[ ! "${HOSTNAME_VALUE}" =~ ^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(\.([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))*$ ]]; then
     error "Invalid hostname: ${HOSTNAME_VALUE}"
 fi
 printf '%s\n' "${HOSTNAME_VALUE}" > "${TARGET_MOUNT}/etc/hostname"
@@ -338,7 +342,10 @@ else
         echo ""
         [[ -n "${ROOT_PASSWORD}" ]] || { echo "Password cannot be empty."; continue; }
         [[ "${ROOT_PASSWORD}" == "${ROOT_PASSWORD_CONFIRM}" ]] || { echo "Passwords do not match."; continue; }
-        printf 'root:%s\n' "${ROOT_PASSWORD}" | chroot "${TARGET_MOUNT}" chpasswd
+        if ! printf 'root:%s\n' "${ROOT_PASSWORD}" | chroot "${TARGET_MOUNT}" chpasswd; then
+            unset ROOT_PASSWORD ROOT_PASSWORD_CONFIRM
+            error "Failed to set root password in target system."
+        fi
         unset ROOT_PASSWORD ROOT_PASSWORD_CONFIRM
         break
     done
