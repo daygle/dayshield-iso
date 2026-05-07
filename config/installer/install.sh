@@ -141,6 +141,7 @@ valid_root_password() {
     local password="$1"
     [[ "${password}" != *:* ]] || return 1
     [[ ! "${password}" =~ [[:cntrl:]] ]] || return 1
+    return 0
 }
 
 collect_install_configuration() {
@@ -184,7 +185,7 @@ collect_install_configuration() {
         done
     else
         valid_root_password "${INSTALL_ROOT_PASSWORD}" || \
-            error "Invalid DAYSHIELD_ROOT_PASSWORD. Avoid ':' and control characters."
+            error "Invalid root password from DAYSHIELD_ROOT_PASSWORD. Avoid ':' and control characters."
     fi
 
     # Interface selection
