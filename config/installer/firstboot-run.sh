@@ -57,15 +57,15 @@ find /var/lib/dhcp/ -name '*.leases' -delete 2>/dev/null || true
 find /var/lib/dhclient/ -name '*.leases' -delete 2>/dev/null || true
 
 # Reload network units
-systemctl daemon-reload || echo "WARNING: daemon-reload failed"
-systemctl restart systemd-networkd || echo "WARNING: systemd-networkd restart failed"
+systemctl daemon-reload || echo "WARNING: daemon-reload failed" >&2
+systemctl restart systemd-networkd || echo "WARNING: systemd-networkd restart failed" >&2
 
 # ---------------------------------------------------------------------------
 # 5. Start dayshield-core
 # ---------------------------------------------------------------------------
 echo "--> Starting dayshield-core …"
-systemctl enable dayshield.service || echo "WARNING: Failed to enable dayshield.service"
-systemctl start  dayshield.service || echo "WARNING: Failed to start dayshield.service"
+systemctl enable dayshield.service || echo "WARNING: Failed to enable dayshield.service" >&2
+systemctl start  dayshield.service || echo "WARNING: Failed to start dayshield.service" >&2
 
 # ---------------------------------------------------------------------------
 # 6. Remove firstboot marker

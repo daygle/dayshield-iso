@@ -116,6 +116,7 @@ if [[ "${DAYSHIELD_UNATTENDED:-}" != "1" ]]; then
             unset _root_pass1 _root_pass2
             break
         fi
+        unset _root_pass1 _root_pass2
         warn "Passwords do not match or are empty. Please try again."
     done
 else
@@ -164,8 +165,8 @@ mount "${EFI_PART}" "${TARGET_MOUNT}/boot/efi"
 # unmounted on any subsequent failure, including from sub-scripts.
 cleanup_all_mounts() {
     # Pseudo-filesystems (may or may not be mounted at this point)
-    for _fs in run sys proc dev/pts dev; do
-        umount -lf "${TARGET_MOUNT}/${_fs}" 2>/dev/null || true
+    for _mount_point in run sys proc dev/pts dev; do
+        umount -lf "${TARGET_MOUNT}/${_mount_point}" 2>/dev/null || true
     done
     # Target partitions
     umount -lf "${TARGET_MOUNT}/boot/efi" 2>/dev/null || true

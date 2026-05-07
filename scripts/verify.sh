@@ -113,7 +113,7 @@ mount -t squashfs -o loop,ro \
     "${ISO_MOUNT}/live/filesystem.squashfs" "${SQ_MOUNT}" 2>/dev/null
 check "squashfs mounts without error"          test -f "${SQ_MOUNT}/etc/os-release"
 check "squashfs /bin or /usr/bin is populated" \
-    bash -c 'test -d "$1/bin" || test -d "$1/usr/bin"' -- "${SQ_MOUNT}"
+    bash -c 'test -n "$(ls -A "$1/bin" 2>/dev/null || ls -A "$1/usr/bin" 2>/dev/null)"' -- "${SQ_MOUNT}"
 check "squashfs /usr/lib/dayshield-installer/install.sh exists" \
     test -f "${SQ_MOUNT}/usr/lib/dayshield-installer/install.sh"
 check "squashfs /usr/lib/dayshield-installer/firstboot-run.sh exists" \
