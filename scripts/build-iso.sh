@@ -142,4 +142,4 @@ run_step cleanup.sh
 echo ""
 echo "==> ISO built successfully: ${OUTPUT}"
 echo "    Size: $(du -sh "${OUTPUT}" | cut -f1)"
-echo "    Checksums: ${OUTPUT}.md5, ${OUTPUT}.sha256"
+echo "    Checksum: ${OUTPUT}.sha256"

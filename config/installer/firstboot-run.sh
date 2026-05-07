@@ -37,7 +37,7 @@ ssh-keygen -A
 # ---------------------------------------------------------------------------
 echo "--> Generating machine-id …"
 systemd-machine-id-setup --force 2>/dev/null || \
-    cat /proc/sys/kernel/random/uuid | tr -d '-' > /etc/machine-id
+    tr -d '-' < /proc/sys/kernel/random/uuid > /etc/machine-id
 
 # ---------------------------------------------------------------------------
 # 3. ACME / TLS keys (if dayshield-acme is installed)
@@ -64,8 +64,14 @@ systemctl restart systemd-networkd 2>/dev/null || true
 # 5. Start dayshield-core
 # ---------------------------------------------------------------------------
 echo "--> Starting dayshield-core …"
-systemctl enable dayshield.service 2>/dev/null || true
-systemctl start  dayshield.service 2>/dev/null || true
+systemctl enable dayshield.service || {
+    echo "[ERROR] Failed to enable dayshield.service" >&2
+    exit 1
+}
+systemctl start dayshield.service || {
+    echo "[ERROR] Failed to start dayshield.service" >&2
+    exit 1
+}
 
 # ---------------------------------------------------------------------------
 # 6. Remove firstboot marker
