@@ -137,6 +137,12 @@ valid_ipv4_cidr() {
     done
 }
 
+valid_root_password() {
+    local password="$1"
+    [[ "${password}" != *:* ]] || return 1
+    [[ ! "${password}" =~ [[:cntrl:]] ]] || return 1
+}
+
 collect_install_configuration() {
     local unattended="${DAYSHIELD_UNATTENDED:-0}"
     local _wan_idx _lan_idx
@@ -169,9 +175,16 @@ collect_install_configuration() {
             echo ""
             [[ -n "${pass1}" ]] || { warn "Password cannot be empty."; continue; }
             [[ "${pass1}" == "${pass2}" ]] || { warn "Passwords do not match."; continue; }
+            valid_root_password "${pass1}" || {
+                warn "Password cannot contain ':' or control characters."
+                continue
+            }
             INSTALL_ROOT_PASSWORD="${pass1}"
             break
         done
+    else
+        valid_root_password "${INSTALL_ROOT_PASSWORD}" || \
+            error "Invalid DAYSHIELD_ROOT_PASSWORD. Avoid ':' and control characters."
     fi
 
     # Interface selection
