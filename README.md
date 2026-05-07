@@ -558,7 +558,18 @@ If the web UI cannot be used, shell installer scripts are available under
 
 # Specify target disk explicitly
 DAYSHIELD_TARGET_DISK=/dev/sda /usr/lib/dayshield-installer/install.sh
+
+# Unattended install with explicit hostname and root password
+DAYSHIELD_UNATTENDED=1 \
+DAYSHIELD_TARGET_DISK=/dev/sda \
+DAYSHIELD_HOSTNAME=dayshield \
+DAYSHIELD_ROOT_PASSWORD='change-me' \
+/usr/lib/dayshield-installer/install.sh
 ```
+
+The installer sets the installed system's hostname and root password, and
+installs an SSH configuration drop-in that explicitly allows root login with
+password authentication.
 
 ### First boot (after install)
 
@@ -622,4 +633,3 @@ npx tailwindcss -i styles.css -o dist/styles.css \
 | No IPv6 | `ipv6.disable=1` kernel parameter + dracut `omit_dracutmodules+=" ipv6 "` |
 | GPT partitioning | Required for UEFI; also supported by modern BIOS-boot GRUB |
 | ext4 root filesystem | Best compatibility with the Debian-based rootfs |
-
