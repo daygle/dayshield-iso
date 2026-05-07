@@ -67,7 +67,15 @@ is_pe_efi_binary() {
 # shellcheck disable=SC2317
 is_userland_present() {
     local sq_mount="$1"
-    find "${sq_mount}/bin" "${sq_mount}/usr/bin" -mindepth 1 -print -quit >/dev/null 2>&1
+    local candidate
+
+    for candidate in "${sq_mount}/bin" "${sq_mount}/usr/bin"; do
+        if [[ -d "${candidate}" ]] && find "${candidate}" -mindepth 1 -print -quit >/dev/null 2>&1; then
+            return 0
+        fi
+    done
+
+    return 1
 }
 
 # shellcheck disable=SC2317
