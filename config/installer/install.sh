@@ -42,6 +42,47 @@ require_root() {
     [[ "${EUID}" -eq 0 ]] || error "This installer must be run as root."
 }
 
+device_base_name() {
+    local dev="$1"
+    local base re
+    base="$(basename "${dev}")"
+    if [[ "${base}" =~ ^nvme[0-9]+n[0-9]+$ ]]; then
+        :
+    elif [[ "${base}" =~ ^mmcblk[0-9]+$ ]]; then
+        :
+    elif [[ "${base}" =~ ^(nvme[0-9]+n[0-9]+)p[0-9]+$ ]]; then
+        re="${BASH_REMATCH[1]}"
+        base="${re}"
+    elif [[ "${base}" =~ ^(mmcblk[0-9]+)p[0-9]+$ ]]; then
+        re="${BASH_REMATCH[1]}"
+        base="${re}"
+    else
+        base="${base%%[0-9]*}"
+    fi
+    printf '%s\n' "${base}"
+}
+
+live_medium_base_disk() {
+    local mounted
+    mounted="$(lsblk -n -o NAME,MOUNTPOINT \
+        | awk '$2=="/run/live/medium" || $2=="/media/cdrom" {print $1}' \
+        | head -n1 || true)"
+    if [[ -z "${mounted}" ]]; then
+        return 0
+    fi
+    device_base_name "/dev/${mounted}"
+}
+
+validate_target_disk() {
+    local target="$1"
+    local target_base live_base
+    target_base="$(device_base_name "${target}")"
+    live_base="$(live_medium_base_disk || true)"
+    if [[ -n "${live_base}" ]] && [[ "${target_base}" == "${live_base}" ]]; then
+        error "Refusing to install onto live media disk (${target})."
+    fi
+}
+
 valid_hostname() {
     local hostname="$1"
     [[ "${hostname}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$ ]]
@@ -181,14 +222,15 @@ if [[ -z "${TARGET_DISK}" ]]; then
 fi
 
 [[ -b "${TARGET_DISK}" ]] || error "Not a block device: ${TARGET_DISK}"
+validate_target_disk "${TARGET_DISK}"
 
 info "Installing DayShield Firewall OS to ${TARGET_DISK}"
 info "WARNING: All data on ${TARGET_DISK} will be erased."
 
 # Confirm unless DAYSHIELD_UNATTENDED=1
 if [[ "${DAYSHIELD_UNATTENDED:-}" != "1" ]]; then
-    read -rp "Type 'yes' to continue: " confirm
-    [[ "${confirm}" == "yes" ]] || error "Installation cancelled."
+    read -rp "Type '${TARGET_DISK}' to continue: " confirm
+    [[ "${confirm}" == "${TARGET_DISK}" ]] || error "Installation cancelled."
 fi
 
 collect_install_configuration
@@ -377,6 +419,7 @@ EOF
 info "Writing network configuration …"
 NETWORK_DIR="${TARGET_MOUNT}/etc/systemd/network"
 mkdir -p "${NETWORK_DIR}"
+LAN_CIDR="${DAYSHIELD_LAN_CIDR:-192.168.1.1/24}"
 
 # 10-wan.network — WAN interface with DHCP.
 cat > "${NETWORK_DIR}/10-wan.network" <<EOF
@@ -402,7 +445,7 @@ cat > "${NETWORK_DIR}/20-lan.network" <<EOF
 Name=${INSTALL_LAN_IFACE}
 
 [Network]
-Address=192.168.1.1/24
+Address=${LAN_CIDR}
 IPv6AcceptRA=no
 EOF
 
@@ -436,6 +479,46 @@ ln -sf /dev/null "${SYSTEMD_DIR}/systemd-resolved.service" 2>/dev/null || true
 # /run/systemd/resolve/resolv.conf is never populated; a plain file is safer.
 rm -f "${TARGET_MOUNT}/etc/resolv.conf"
 printf 'nameserver 127.0.0.1\n' > "${TARGET_MOUNT}/etc/resolv.conf"
+
+# ---------------------------------------------------------------------------
+# Hostname and root password configuration
+# ---------------------------------------------------------------------------
+HOSTNAME_VALUE="${DAYSHIELD_HOSTNAME:-dayshield}"
+# RFC 1123-ish hostname validation:
+# - labels are alnum plus interior hyphens
+# - each label <=63 chars
+# - labels separated by dots
+if [[ ! "${HOSTNAME_VALUE}" =~ ^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(\.([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))*$ ]]; then
+    error "Invalid hostname: ${HOSTNAME_VALUE}"
+fi
+printf '%s\n' "${HOSTNAME_VALUE}" > "${TARGET_MOUNT}/etc/hostname"
+cat > "${TARGET_MOUNT}/etc/hosts" <<EOF
+127.0.0.1 localhost
+127.0.1.1 ${HOSTNAME_VALUE}
+::1 localhost ip6-localhost ip6-loopback
+EOF
+
+ROOT_PASSWORD_HASH="${DAYSHIELD_ROOT_PASSWORD_HASH:-}"
+if [[ -n "${ROOT_PASSWORD_HASH}" ]]; then
+    printf 'root:%s\n' "${ROOT_PASSWORD_HASH}" | chroot "${TARGET_MOUNT}" chpasswd -e
+elif [[ "${DAYSHIELD_UNATTENDED:-}" == "1" ]]; then
+    error "DAYSHIELD_UNATTENDED=1 requires DAYSHIELD_ROOT_PASSWORD_HASH."
+else
+    while true; do
+        read -rsp "Enter root password for installed system: " ROOT_PASSWORD
+        echo ""
+        read -rsp "Confirm root password: " ROOT_PASSWORD_CONFIRM
+        echo ""
+        [[ -n "${ROOT_PASSWORD}" ]] || { echo "Password cannot be empty."; continue; }
+        [[ "${ROOT_PASSWORD}" == "${ROOT_PASSWORD_CONFIRM}" ]] || { echo "Passwords do not match."; continue; }
+        if ! printf 'root:%s\n' "${ROOT_PASSWORD}" | chroot "${TARGET_MOUNT}" chpasswd; then
+            unset ROOT_PASSWORD ROOT_PASSWORD_CONFIRM
+            error "Failed to set root password in target system."
+        fi
+        unset ROOT_PASSWORD ROOT_PASSWORD_CONFIRM
+        break
+    done
+fi
 
 # ---------------------------------------------------------------------------
 # Firstboot marker

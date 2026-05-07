@@ -38,6 +38,30 @@ SQUASHFS_IMG="${BUILD_DIR}/squashfs-rootfs.sqsh"
 BOOT_DIR="${BUILD_DIR}/bootloader"
 INSTALLER_SRC="${CONFIG_DIR}/installer"
 
+prune_installer_ui_tree() {
+    local ui_root="$1"
+    rm -rf \
+        "${ui_root}/.git" \
+        "${ui_root}/.github" \
+        "${ui_root}/node_modules"
+    find "${ui_root}" -type f \( \
+        -name '.env' -o \
+        -name '.env.*' -o \
+        -name '*.map' -o \
+        -name '*.test.*' -o \
+        -name '*.spec.*' -o \
+        -name 'package.json' -o \
+        -name 'package-lock.json' -o \
+        -name 'pnpm-lock.yaml' -o \
+        -name 'yarn.lock' -o \
+        -name 'tsconfig*.json' -o \
+        -name 'vite.config.*' -o \
+        -name 'tailwind.config.*' -o \
+        -name 'README*' -o \
+        -name 'LICENSE*' \
+    \) -delete 2>/dev/null || true
+}
+
 # ---------------------------------------------------------------------------
 # Validate required artefacts
 # ---------------------------------------------------------------------------
@@ -113,6 +137,7 @@ if [[ -n "${INSTALLER_UI_DIR}" ]] && [[ -d "${INSTALLER_UI_DIR}" ]]; then
     echo "--> Embedding installer web UI at /installer-ui/ …"
     mkdir -p "${ISO_ROOT}/installer-ui"
     cp -r "${INSTALLER_UI_DIR}/." "${ISO_ROOT}/installer-ui/"
+    prune_installer_ui_tree "${ISO_ROOT}/installer-ui"
 fi
 
 # Normalise all timestamps to epoch 0

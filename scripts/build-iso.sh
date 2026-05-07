@@ -2,7 +2,7 @@
 # build-iso.sh - Main entrypoint for the DayShield ISO builder.
 #
 # Usage:
-#   build-iso.sh [--rootfs rootfs.tar.zst] [--installer-ui path] [--output dayshield.iso] [--arch amd64]
+#   build-iso.sh [--rootfs rootfs.tar.zst] [--rootfs-sha256 <sha256>] [--installer-ui path] [--output dayshield.iso] [--arch amd64]
 #
 # All sub-scripts are expected to live alongside this script.
 
@@ -15,6 +15,8 @@ ROOTFS=""
 OUTPUT="dayshield.iso"
 ARCH="amd64"
 INSTALLER_UI_DIR=""
+ROOTFS_SHA256=""
+: "${ALLOW_NETWORK_FETCH:="0"}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -33,6 +35,8 @@ while [[ $# -gt 0 ]]; do
             ARCH="$2"; shift 2 ;;
         --installer-ui)
             INSTALLER_UI_DIR="$2"; shift 2 ;;
+        --rootfs-sha256)
+            ROOTFS_SHA256="$2"; shift 2 ;;
         --help|-h)
             grep '^#' "$0" | sed 's/^# \?//'
             exit 0 ;;
@@ -65,11 +69,44 @@ if [[ "${OUTPUT_DIR}" != "." ]] && [[ ! -d "${OUTPUT_DIR}" ]]; then
 fi
 OUTPUT="$(cd "${OUTPUT_DIR}" && pwd -P)/$(basename "${OUTPUT}")"
 
+verify_rootfs_archive() {
+    local archive="$1"
+    local expected_hash="${2:-}"
+    local sidecar_hash=""
+
+    if [[ -z "${expected_hash}" ]] && [[ -f "${archive}.sha256" ]]; then
+        sidecar_hash="$(awk '{print $1; exit}' "${archive}.sha256" | tr -d '[:space:]')"
+        expected_hash="${sidecar_hash}"
+    fi
+
+    if [[ -z "${expected_hash}" ]]; then
+        echo "ERROR: rootfs checksum verification is required." >&2
+        echo "       Provide --rootfs-sha256 <sha256> or ${archive}.sha256." >&2
+        exit 1
+    fi
+
+    if ! [[ "${expected_hash}" =~ ^[A-Fa-f0-9]{64}$ ]]; then
+        echo "ERROR: invalid SHA256 value for rootfs: ${expected_hash}" >&2
+        exit 1
+    fi
+
+    local actual_hash
+    actual_hash="$(sha256sum "${archive}" | awk '{print $1}')"
+    if [[ "${actual_hash}" != "${expected_hash,,}" ]]; then
+        echo "ERROR: rootfs SHA256 mismatch." >&2
+        echo "       expected: ${expected_hash,,}" >&2
+        echo "       actual  : ${actual_hash}" >&2
+        exit 1
+    fi
+}
+
+verify_rootfs_archive "${ROOTFS}" "${ROOTFS_SHA256}"
+
 # ---------------------------------------------------------------------------
 # Build directory (deterministic structure inside working directory)
 # ---------------------------------------------------------------------------
 BUILD_DIR="${REPO_ROOT}/build"
-export BUILD_DIR ARCH CONFIG_DIR REPO_ROOT
+export BUILD_DIR ARCH CONFIG_DIR REPO_ROOT ALLOW_NETWORK_FETCH
 
 echo "==> DayShield ISO Builder"
 echo "    rootfs  : ${ROOTFS}"
@@ -77,6 +114,7 @@ echo "    output  : ${OUTPUT}"
 echo "    arch    : ${ARCH}"
 echo "    build   : ${BUILD_DIR}"
 echo "    installer-ui: ${INSTALLER_UI_DIR}"
+echo "    allow-network-fetch: ${ALLOW_NETWORK_FETCH}"
 
 validate_installer_ui() {
     local dir="$1"

@@ -27,7 +27,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${BUILD_DIR:="${SCRIPT_DIR}/../build"}"
-: "${ALLOW_APT_NETWORK:="0"}"
+: "${ALLOW_NETWORK_FETCH:="0"}"
 
 ROOTFS_DIR="${BUILD_DIR}/rootfs"
 
@@ -60,10 +60,9 @@ if _pkg_installed live-boot-initramfs-tools && _pkg_installed live-config; then
     exit 0
 fi
 
-if [[ "${ALLOW_APT_NETWORK}" != "1" ]]; then
-    echo "ERROR: live-boot/live-config are missing from ${ROOTFS_DIR}." >&2
-    echo "       Network package installation is disabled by default for reproducibility." >&2
-    echo "       Rebuild the rootfs with live-boot packages included, or rerun with ALLOW_APT_NETWORK=1." >&2
+if [[ "${ALLOW_NETWORK_FETCH}" != "1" ]]; then
+    echo "ERROR: live-boot packages are missing in rootfs and network fetch is disabled." >&2
+    echo "       Rebuild rootfs with required packages or set ALLOW_NETWORK_FETCH=1 explicitly." >&2
     exit 1
 fi
 

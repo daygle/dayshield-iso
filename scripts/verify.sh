@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2317
 # verify.sh — Verify a DayShield installer ISO.
 #
 # Checks:

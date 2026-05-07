@@ -1,7 +1,7 @@
 # DayShield ISO Builder — Makefile
 #
 # Usage:
-#   make iso ROOTFS=../dayshield-rootfs/rootfs.tar.zst
+#   make iso ROOTFS=../dayshield-rootfs/rootfs.tar.zst ROOTFS_SHA256=<sha256>
 #   make verify ISO=dayshield.iso
 #   make clean
 
@@ -13,6 +13,7 @@ ROOTFS       ?= rootfs.tar.zst
 OUTPUT       ?= dayshield.iso
 ARCH         ?= amd64
 INSTALLER_UI ?= ../dayshield-installer-ui/installer-ui
+ROOTFS_SHA256 ?=
 
 SHELLCHECK   ?= shellcheck
 SHELLCHECK_FILES := $(shell find scripts config -name '*.sh' | sort)
@@ -39,6 +40,7 @@ iso: ## Build the DayShield installer ISO
 	    --rootfs "$(ROOTFS)" \
 	    --output "$(OUTPUT)" \
 	    --arch   "$(ARCH)" \
+	    $(if $(ROOTFS_SHA256),--rootfs-sha256 "$(ROOTFS_SHA256)",) \
 	    --installer-ui "$(INSTALLER_UI)"
 	@echo ""
 	@echo "ISO: $(OUTPUT)"
