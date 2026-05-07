@@ -52,22 +52,58 @@ check() {
     fi
 }
 
-has_mz_header() {
+# shellcheck disable=SC2317
+is_pe_efi_binary() {
     local file="$1"
-    od -A n -N 2 -t x1 "${file}" 2>/dev/null | grep -qi "4d 5a"
+    # "4d 5a" is ASCII "MZ", the DOS/PE executable header signature.
+    local pe_offset
+    od -A n -N 2 -t x1 "${file}" 2>/dev/null | grep -qi "4d 5a" || return 1
+    # Offset 0x3C (decimal 60) stores the PE header location in DOS/PE files.
+    pe_offset="$(od -An -j 60 -N 4 -tu4 "${file}" 2>/dev/null | tr -d '[:space:]')"
+    [[ "${pe_offset}" =~ ^[0-9]+$ ]] || return 1
+    od -A n -j "${pe_offset}" -N 4 -t x1 "${file}" 2>/dev/null | grep -qi "50 45 00 00"
 }
 
-has_bin_or_usr_bin() {
-    local root="$1"
-    [[ -d "${root}/bin" ]] || [[ -d "${root}/usr/bin" ]]
+# shellcheck disable=SC2317
+is_userland_present() {
+    local sq_mount="$1"
+    find "${sq_mount}/bin" "${sq_mount}/usr/bin" -mindepth 1 -print -quit >/dev/null 2>&1
 }
 
-qemu_output_has_boot_markers() {
-    local timeout_sec="$1"
-    shift
-    timeout "${timeout_sec}" qemu-system-x86_64 "$@" 2>&1 \
-        | head -n 30 \
-        | grep -qiE "grub|linux|boot"
+# shellcheck disable=SC2317
+qemu_boot_probe() {
+    local firmware_path="${1:-}"
+    local log_file
+    log_file="$(mktemp)"
+
+    if [[ -n "${firmware_path}" ]]; then
+        timeout "${QEMU_TIMEOUT}" \
+            qemu-system-x86_64 \
+                -nographic \
+                -no-reboot \
+                -m 1024M \
+                -bios "${firmware_path}" \
+                -cdrom "${ISO}" \
+                -boot d \
+                >"${log_file}" 2>&1 || true
+    else
+        timeout "${QEMU_TIMEOUT}" \
+            qemu-system-x86_64 \
+                -nographic \
+                -no-reboot \
+                -m 1024M \
+                -cdrom "${ISO}" \
+                -boot d \
+                >"${log_file}" 2>&1 || true
+    fi
+
+    if grep -Eqi 'GNU GRUB|Linux version [0-9]|Booting .*DayShield|loading linux' "${log_file}"; then
+        rm -f "${log_file}"
+        return 0
+    fi
+
+    rm -f "${log_file}"
+    return 1
 }
 
 # ---------------------------------------------------------------------------
@@ -75,15 +111,15 @@ qemu_output_has_boot_markers() {
 # ---------------------------------------------------------------------------
 ISO_MOUNT="$(mktemp -d)"
 mount -o loop,ro "${ISO}" "${ISO_MOUNT}"
-_cleanup() {
-    # Preserve the script's original exit status: trap handlers run on EXIT and
-    # should only clean resources, not replace success/failure semantics.
+SQ_MOUNT=""
+# shellcheck disable=SC2317
+cleanup() {
     umount "${SQ_MOUNT:-}" 2>/dev/null || true
     rm -rf  "${SQ_MOUNT:-}" 2>/dev/null || true
     umount "${ISO_MOUNT}" 2>/dev/null || true
     rm -rf  "${ISO_MOUNT}" 2>/dev/null || true
 }
-trap '_cleanup' EXIT
+trap cleanup EXIT
 
 echo ""
 echo "==> Verifying ISO content: ${ISO}"
@@ -107,7 +143,7 @@ fi
 check "EFI/BOOT/BOOTX64.EFI exists"        test -f "${ISO_MOUNT}/EFI/BOOT/BOOTX64.EFI"
 check "EFI/BOOT/BOOTX64.EFI is non-empty"  test -s "${ISO_MOUNT}/EFI/BOOT/BOOTX64.EFI"
 check "EFI/BOOT/BOOTX64.EFI is PE32+ EFI" \
-    has_mz_header "${ISO_MOUNT}/EFI/BOOT/BOOTX64.EFI"
+    is_pe_efi_binary "${ISO_MOUNT}/EFI/BOOT/BOOTX64.EFI"
 check "EFI/efiboot.img exists"            test -f "${ISO_MOUNT}/EFI/efiboot.img"
 check "installer/install.sh exists"        test -f "${ISO_MOUNT}/installer/install.sh"
 check "installer/partition.sh exists"      test -f "${ISO_MOUNT}/installer/partition.sh"
@@ -126,13 +162,12 @@ check "installer-ui/httpd.conf exists"      test -f "${ISO_MOUNT}/installer-ui/h
 echo ""
 echo "--- squashfs mount ---"
 SQ_MOUNT="$(mktemp -d)"
-trap '_cleanup' EXIT
 
 mount -t squashfs -o loop,ro \
     "${ISO_MOUNT}/live/filesystem.squashfs" "${SQ_MOUNT}" 2>/dev/null
 check "squashfs mounts without error"          test -f "${SQ_MOUNT}/etc/os-release"
 check "squashfs /bin or /usr/bin is populated" \
-    has_bin_or_usr_bin "${SQ_MOUNT}"
+    is_userland_present "${SQ_MOUNT}"
 check "squashfs /usr/lib/dayshield-installer/install.sh exists" \
     test -f "${SQ_MOUNT}/usr/lib/dayshield-installer/install.sh"
 check "squashfs /usr/lib/dayshield-installer/firstboot-run.sh exists" \
@@ -140,6 +175,7 @@ check "squashfs /usr/lib/dayshield-installer/firstboot-run.sh exists" \
 check "squashfs /installer-ui/index.html exists" \
     test -f "${SQ_MOUNT}/installer-ui/index.html"
 umount "${SQ_MOUNT}" && rm -rf "${SQ_MOUNT}"
+SQ_MOUNT=""
 
 # ---------------------------------------------------------------------------
 # 3. GRUB config sanity
@@ -198,25 +234,10 @@ if ${QEMU_TEST}; then
     else
         QEMU_TIMEOUT=90
 
-        echo "  Testing BIOS boot …"
-        check "BIOS QEMU shows boot output" \
-            qemu_output_has_boot_markers "${QEMU_TIMEOUT}" \
-                -nographic \
-                -no-reboot \
-                -m 1024M \
-                -cdrom "${ISO}" \
-                -boot d
+        check "BIOS QEMU shows boot output" qemu_boot_probe
 
         if [[ -n "${OVMF_PATH}" ]] && [[ -f "${OVMF_PATH}" ]]; then
-            echo "  Testing UEFI boot …"
-            check "UEFI QEMU shows boot output" \
-                qemu_output_has_boot_markers "${QEMU_TIMEOUT}" \
-                    -nographic \
-                    -no-reboot \
-                    -m 1024M \
-                    -bios "${OVMF_PATH}" \
-                    -cdrom "${ISO}" \
-                    -boot d
+            check "UEFI QEMU shows boot output" qemu_boot_probe "${OVMF_PATH}"
         else
             echo "  [SKIP] UEFI test skipped (use --ovmf /path/to/OVMF.fd)"
         fi

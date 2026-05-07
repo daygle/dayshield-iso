@@ -39,6 +39,14 @@ if [[ -z "${KVER}" ]]; then
 fi
 
 KERNEL_VERSION="${KVER}"
+if [[ -n "${KERNEL_VERSION}" ]] && [[ ! "${KERNEL_VERSION}" =~ ^[A-Za-z0-9._+-]+$ ]]; then
+    echo "ERROR: Invalid kernel version string: ${KERNEL_VERSION}" >&2
+    exit 1
+fi
+if [[ "${KERNEL_VERSION}" == *".."* ]]; then
+    echo "ERROR: Invalid kernel version string contains '..': ${KERNEL_VERSION}" >&2
+    exit 1
+fi
 
 echo "--> Building initrd (kernel: ${KERNEL_VERSION:-unknown}) …"
 
@@ -82,7 +90,12 @@ omit_dracutmodules+=" ipv6 bluetooth iscsi "
 compress="zstd"
 EOF
 
-    DRACUT_ARGS=()
+    DRACUT_ARGS=(
+        --conf "${DRACUT_CONF}"
+        --force
+        --no-hostonly
+        --add "dmsquash-live"
+    )
     if [[ -n "${KERNEL_VERSION}" ]]; then
         DRACUT_ARGS+=(--kver "${KERNEL_VERSION}")
         # Point dracut at the rootfs modules - the build host won't have them
@@ -92,13 +105,7 @@ EOF
         fi
     fi
 
-    dracut \
-        --conf "${DRACUT_CONF}" \
-        --force \
-        --no-hostonly \
-        --add "dmsquash-live" \
-        "${DRACUT_ARGS[@]}" \
-        "${KERNEL_DIR}/initrd.img"
+    dracut "${DRACUT_ARGS[@]}" "${KERNEL_DIR}/initrd.img"
 
     rm -f "${DRACUT_CONF}"
 

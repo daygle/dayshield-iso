@@ -16,6 +16,10 @@ set -euo pipefail
 INSTALLER_DIR="/usr/lib/dayshield-installer"
 TARGET_MOUNT="/mnt/target"
 LOG_FILE="/tmp/dayshield-install.log"
+INSTALL_HOSTNAME=""
+INSTALL_ROOT_PASSWORD=""
+INSTALL_WAN_IFACE=""
+INSTALL_LAN_IFACE=""
 
 # Locate the squashfs on the live medium (path varies by live-boot version)
 SQUASHFS_IMG="$(find /run/live/medium/live /lib/live/mount/medium/live -name 'filesystem.squashfs' 2>/dev/null | head -n1 || true)"
@@ -77,6 +81,94 @@ validate_target_disk() {
     if [[ -n "${live_base}" ]] && [[ "${target_base}" == "${live_base}" ]]; then
         error "Refusing to install onto live media disk (${target})."
     fi
+}
+
+valid_hostname() {
+    local hostname="$1"
+    [[ "${hostname}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$ ]]
+}
+
+valid_iface_name() {
+    local iface="$1"
+    [[ "${iface}" =~ ^[[:alnum:]_.:-]+$ ]]
+}
+
+collect_install_configuration() {
+    local unattended="${DAYSHIELD_UNATTENDED:-0}"
+    local _wan_idx _lan_idx
+
+    # Hostname
+    INSTALL_HOSTNAME="${DAYSHIELD_HOSTNAME:-}"
+    if [[ -z "${INSTALL_HOSTNAME}" ]]; then
+        if [[ "${unattended}" == "1" ]]; then
+            INSTALL_HOSTNAME="dayshield"
+        else
+            read -rp "Hostname [dayshield]: " INSTALL_HOSTNAME
+            INSTALL_HOSTNAME="${INSTALL_HOSTNAME:-dayshield}"
+        fi
+    fi
+    valid_hostname "${INSTALL_HOSTNAME}" || \
+        error "Invalid hostname '${INSTALL_HOSTNAME}'. Use letters, digits, and '-' only."
+
+    # Root password
+    INSTALL_ROOT_PASSWORD="${DAYSHIELD_ROOT_PASSWORD:-}"
+    if [[ -z "${INSTALL_ROOT_PASSWORD}" ]]; then
+        if [[ "${unattended}" == "1" ]]; then
+            error "DAYSHIELD_ROOT_PASSWORD is required when DAYSHIELD_UNATTENDED=1."
+        fi
+
+        local pass1="" pass2=""
+        while true; do
+            read -rsp "Set root password: " pass1
+            echo ""
+            read -rsp "Confirm root password: " pass2
+            echo ""
+            [[ -n "${pass1}" ]] || { warn "Password cannot be empty."; continue; }
+            [[ "${pass1}" == "${pass2}" ]] || { warn "Passwords do not match."; continue; }
+            INSTALL_ROOT_PASSWORD="${pass1}"
+            break
+        done
+    fi
+
+    # Interface selection
+    mapfile -t _ifaces < <(find /sys/class/net -mindepth 1 -maxdepth 1 -printf '%f\n' | grep -v '^lo$' | sort)
+    [[ ${#_ifaces[@]} -ge 2 ]] || error "At least two non-loopback network interfaces are required."
+
+    INSTALL_WAN_IFACE="${DAYSHIELD_WAN_IFACE:-}"
+    INSTALL_LAN_IFACE="${DAYSHIELD_LAN_IFACE:-}"
+
+    if [[ -z "${INSTALL_WAN_IFACE}" ]]; then
+        if [[ "${unattended}" == "1" ]]; then
+            INSTALL_WAN_IFACE="${_ifaces[0]}"
+        else
+            echo ""
+            echo "Available network interfaces:"
+            for i in "${!_ifaces[@]}"; do
+                echo "  [$i] ${_ifaces[$i]}"
+            done
+            read -rp "Select WAN interface [0]: " _wan_idx
+            _wan_idx="${_wan_idx:-0}"
+            [[ "${_wan_idx}" =~ ^[0-9]+$ ]] || error "Invalid WAN interface index: ${_wan_idx}"
+            [[ "${_wan_idx}" -lt "${#_ifaces[@]}" ]] || error "WAN interface index out of range: ${_wan_idx}"
+            INSTALL_WAN_IFACE="${_ifaces[${_wan_idx}]}"
+        fi
+    fi
+
+    if [[ -z "${INSTALL_LAN_IFACE}" ]]; then
+        if [[ "${unattended}" == "1" ]]; then
+            INSTALL_LAN_IFACE="${_ifaces[1]}"
+        else
+            read -rp "Select LAN interface [1]: " _lan_idx
+            _lan_idx="${_lan_idx:-1}"
+            [[ "${_lan_idx}" =~ ^[0-9]+$ ]] || error "Invalid LAN interface index: ${_lan_idx}"
+            [[ "${_lan_idx}" -lt "${#_ifaces[@]}" ]] || error "LAN interface index out of range: ${_lan_idx}"
+            INSTALL_LAN_IFACE="${_ifaces[${_lan_idx}]}"
+        fi
+    fi
+
+    valid_iface_name "${INSTALL_WAN_IFACE}" || error "Invalid WAN interface name: ${INSTALL_WAN_IFACE}"
+    valid_iface_name "${INSTALL_LAN_IFACE}" || error "Invalid LAN interface name: ${INSTALL_LAN_IFACE}"
+    [[ "${INSTALL_WAN_IFACE}" != "${INSTALL_LAN_IFACE}" ]] || error "WAN and LAN interfaces must be different."
 }
 
 detect_target_disk() {
@@ -141,6 +233,39 @@ if [[ "${DAYSHIELD_UNATTENDED:-}" != "1" ]]; then
     [[ "${confirm}" == "${TARGET_DISK}" ]] || error "Installation cancelled."
 fi
 
+collect_install_configuration
+info "Install configuration:"
+info "  hostname : ${INSTALL_HOSTNAME}"
+info "  WAN iface: ${INSTALL_WAN_IFACE}"
+info "  LAN iface: ${INSTALL_LAN_IFACE}"
+
+# ---------------------------------------------------------------------------
+# Collect configuration (hostname + root password) before touching the disk
+# ---------------------------------------------------------------------------
+if [[ "${DAYSHIELD_UNATTENDED:-}" != "1" ]]; then
+    read -rp "Enter hostname [dayshield]: " INSTALL_HOSTNAME
+    INSTALL_HOSTNAME="${INSTALL_HOSTNAME:-dayshield}"
+
+    while true; do
+        read -rsp "Enter root password: " _root_pass1
+        echo
+        read -rsp "Confirm root password: " _root_pass2
+        echo
+        if [[ "${_root_pass1}" == "${_root_pass2}" ]] && [[ -n "${_root_pass1}" ]]; then
+            INSTALL_ROOT_PASSWORD="${_root_pass1}"
+            unset _root_pass1 _root_pass2
+            break
+        fi
+        unset _root_pass1 _root_pass2
+        warn "Passwords do not match or are empty. Please try again."
+    done
+else
+    INSTALL_HOSTNAME="${DAYSHIELD_HOSTNAME:-dayshield}"
+    # In unattended mode the root password must be supplied explicitly.
+    : "${DAYSHIELD_ROOT_PASSWORD:?DAYSHIELD_ROOT_PASSWORD must be set when DAYSHIELD_UNATTENDED=1}"
+    INSTALL_ROOT_PASSWORD="${DAYSHIELD_ROOT_PASSWORD}"
+fi
+
 # ---------------------------------------------------------------------------
 # Partition
 # ---------------------------------------------------------------------------
@@ -175,6 +300,19 @@ mkdir -p "${TARGET_MOUNT}"
 mount "${ROOT_PART}" "${TARGET_MOUNT}"
 mkdir -p "${TARGET_MOUNT}/boot/efi"
 mount "${EFI_PART}" "${TARGET_MOUNT}/boot/efi"
+
+# Register a top-level cleanup trap so that target partitions are always
+# unmounted on any subsequent failure, including from sub-scripts.
+cleanup_all_mounts() {
+    # Pseudo-filesystems (may or may not be mounted at this point)
+    for _mount_point in run sys proc dev/pts dev; do
+        umount -lf "${TARGET_MOUNT}/${_mount_point}" 2>/dev/null || true
+    done
+    # Target partitions
+    umount -lf "${TARGET_MOUNT}/boot/efi" 2>/dev/null || true
+    umount -lf "${TARGET_MOUNT}" 2>/dev/null || true
+}
+trap cleanup_all_mounts EXIT
 
 # ---------------------------------------------------------------------------
 # Extract rootfs
@@ -217,8 +355,27 @@ rm -rf \
 info "Regenerating initramfs inside target …"
 chroot "${TARGET_MOUNT}" update-initramfs -u -k all
 
+# ---------------------------------------------------------------------------
+# Configure hostname and root password (while chroot bind mounts are active)
+# ---------------------------------------------------------------------------
+info "Configuring hostname: ${INSTALL_HOSTNAME} …"
+echo "${INSTALL_HOSTNAME}" > "${TARGET_MOUNT}/etc/hostname"
+# Ensure /etc/hosts has a 127.0.1.1 entry for the new hostname.
+if [[ -f "${TARGET_MOUNT}/etc/hosts" ]]; then
+    if ! grep -qF "127.0.1.1" "${TARGET_MOUNT}/etc/hosts"; then
+        printf '127.0.1.1\t%s\n' "${INSTALL_HOSTNAME}" >> "${TARGET_MOUNT}/etc/hosts"
+    fi
+else
+    printf '127.0.0.1\tlocalhost\n127.0.1.1\t%s\n' "${INSTALL_HOSTNAME}" \
+        > "${TARGET_MOUNT}/etc/hosts"
+fi
+
+info "Configuring root password …"
+printf 'root:%s\n' "${INSTALL_ROOT_PASSWORD}" | chroot "${TARGET_MOUNT}" chpasswd
+unset INSTALL_ROOT_PASSWORD
+
 cleanup_chroot_mounts
-trap - EXIT
+trap cleanup_all_mounts EXIT
 
 # ---------------------------------------------------------------------------
 # Configure target system
@@ -227,6 +384,23 @@ trap - EXIT
 # Write a fresh machine-id (will be fully regenerated on first boot by systemd)
 info "Writing machine-id …"
 truncate -s 0 "${TARGET_MOUNT}/etc/machine-id"
+
+# Write hostname and set root password
+info "Configuring hostname and root password …"
+printf '%s\n' "${INSTALL_HOSTNAME}" > "${TARGET_MOUNT}/etc/hostname"
+if grep -q '^127\.0\.1\.1[[:space:]]' "${TARGET_MOUNT}/etc/hosts" 2>/dev/null; then
+    awk -v host="${INSTALL_HOSTNAME}" '
+        BEGIN { done=0 }
+        /^127\.0\.1\.1[[:space:]]/ { print "127.0.1.1 " host; done=1; next }
+        { print }
+        END { if (!done) print "127.0.1.1 " host }
+    ' "${TARGET_MOUNT}/etc/hosts" > "${TARGET_MOUNT}/etc/hosts.tmp"
+    mv "${TARGET_MOUNT}/etc/hosts.tmp" "${TARGET_MOUNT}/etc/hosts"
+else
+    printf '127.0.1.1 %s\n' "${INSTALL_HOSTNAME}" >> "${TARGET_MOUNT}/etc/hosts"
+fi
+printf 'root:%s\n' "${INSTALL_ROOT_PASSWORD}" | chroot "${TARGET_MOUNT}" chpasswd
+unset INSTALL_ROOT_PASSWORD
 
 # Write fstab
 info "Writing /etc/fstab …"
@@ -242,20 +416,17 @@ EOF
 # ---------------------------------------------------------------------------
 # Network configuration
 # ---------------------------------------------------------------------------
-info "Writing default network configuration …"
+info "Writing network configuration …"
 NETWORK_DIR="${TARGET_MOUNT}/etc/systemd/network"
 mkdir -p "${NETWORK_DIR}"
-WAN_IFACE="${DAYSHIELD_WAN_IFACE:-eth0 wan}"
-LAN_IFACE="${DAYSHIELD_LAN_IFACE:-eth1 lan}"
 LAN_CIDR="${DAYSHIELD_LAN_CIDR:-192.168.1.1/24}"
 
 # 10-wan.network — WAN interface with DHCP.
-# Adjust Name= to match the actual WAN interface (e.g. enp1s0, ens3, wan).
 cat > "${NETWORK_DIR}/10-wan.network" <<EOF
 # 10-wan.network - Generated by DayShield installer.
 # WAN interface: DHCP on the primary outbound ethernet port.
 [Match]
-Name=${WAN_IFACE}
+Name=${INSTALL_WAN_IFACE}
 
 [Network]
 DHCP=yes
@@ -267,20 +438,18 @@ UseDNS=yes
 EOF
 
 # 20-lan.network — LAN interface with a static address.
-# Adjust Name= and Address= to match the actual LAN interface and desired
-# subnet.
 cat > "${NETWORK_DIR}/20-lan.network" <<EOF
 # 20-lan.network - Generated by DayShield installer.
 # LAN interface: static address on the primary inbound ethernet port.
 [Match]
-Name=${LAN_IFACE}
+Name=${INSTALL_LAN_IFACE}
 
 [Network]
 Address=${LAN_CIDR}
 IPv6AcceptRA=no
 EOF
 
-# Enable systemd-networkd and systemd-resolved on the target by creating the
+# Enable systemd-networkd on the target by creating the
 # required symlinks directly.  Pseudo-filesystem bind mounts were torn down
 # above (after update-initramfs), so chroot + systemctl is not available at
 # this point.
@@ -382,5 +551,6 @@ info "Syncing filesystems …"
 sync
 info "Unmounting target …"
 umount -R "${TARGET_MOUNT}"
+trap - EXIT
 
 info "Installation complete. Remove the installation medium and reboot."

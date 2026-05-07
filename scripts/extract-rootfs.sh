@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # extract-rootfs.sh — Extract rootfs.tar.zst into build/rootfs/.
 #
-# Security guarantees:
+# Security notes:
 #   • No device nodes created (--no-same-owner combined with explicit exclusions)
-#   • No unexpected SUID/SGID binaries added
-#   • Deterministic permissions (umask 022)
+#   • --no-same-permissions applies umask instead of restoring archive permissions
+#   • SUID/SGID binaries are reported but NOT removed; the caller is responsible
+#     for deciding whether any flagged files are acceptable in this rootfs.
 
 set -euo pipefail
 
