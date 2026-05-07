@@ -298,10 +298,11 @@ qemu-system-x86_64 \
 Expected boot sequence: GRUB menu -> kernel messages -> systemd -> installer
 launched on tty1.
 
-> **Live session login** - username `root`, password `dayshield`.  This
-> default is set only for the live/installer environment and is not carried
-> forward to the installed system.  The installer prompts for the installed
-> system root password (or requires `DAYSHIELD_ROOT_PASSWORD` in unattended mode).
+> **Live session login** - The live/installer environment default root password is
+> set in the `dayshield-rootfs` build; it is **not** carried forward to the
+> installed system.  The CLI installer (`install.sh`) prompts for the root
+> password during installation.  Change the live root password before exposing
+> the system to a network.
 
 > **No boot splash** - Plymouth is not installed.  Plain kernel log is
 > intentional.  If you see a panic, check that the ISO label is `DAYSHIELD`
@@ -451,15 +452,16 @@ bash scripts/build-iso.sh \
 
 | Step | Script | Output |
 |------|--------|--------|
-| 1. Extract rootfs       | `extract-rootfs.sh`       | `build/rootfs/` |
-| 2. Inject installer UI  | `inject-installer-ui.sh`  | `build/rootfs/installer-ui/`, service units enabled |
-| 3. Ensure live-boot     | `ensure-live-boot.sh`     | `live-boot`/`live-config` installed into `build/rootfs/` if absent |
-| 4. Build squashfs       | `build-squashfs.sh`       | `build/squashfs-rootfs.sqsh` |
-| 5. Locate kernel        | `build-kernel.sh`         | `build/kernel/vmlinuz`, `build/kernel/initrd.img` |
-| 6. Build initrd         | `build-initrd.sh`         | `build/kernel/initrd.img` (replaced) |
-| 7. Build bootloader     | `build-bootloader.sh`     | `build/bootloader/` |
-| 8. Assemble ISO         | `assemble-iso.sh`         | `dayshield.iso` |
-| 9. Cleanup              | `cleanup.sh`              | removes `build/` |
+| 1. Extract rootfs             | `extract-rootfs.sh`           | `build/rootfs/` |
+| 2. Inject installer UI        | `inject-installer-ui.sh`      | `build/rootfs/installer-ui/`, service units enabled |
+| 3. Embed installer scripts    | `embed-installer-scripts.sh`  | `build/rootfs/usr/lib/dayshield-installer/` |
+| 4. Ensure live-boot           | `ensure-live-boot.sh`         | `live-boot`/`live-config` installed into `build/rootfs/` if absent |
+| 5. Build squashfs             | `build-squashfs.sh`           | `build/squashfs-rootfs.sqsh` |
+| 6. Locate kernel              | `build-kernel.sh`             | `build/kernel/vmlinuz`, `build/kernel/initrd.img` |
+| 7. Build initrd               | `build-initrd.sh`             | `build/kernel/initrd.img` (replaced) |
+| 8. Build bootloader           | `build-bootloader.sh`         | `build/bootloader/` |
+| 9. Assemble ISO               | `assemble-iso.sh`             | `dayshield.iso` |
+| 10. Cleanup                   | `cleanup.sh`                  | removes `build/` |
 
 ### Reproducibility
 
@@ -468,10 +470,14 @@ The build pipeline enforces deterministic output:
 - All file timestamps are normalised to **epoch 0** (`1970-01-01T00:00:00Z`).
 - `mksquashfs` is called with `-mkfs-time 0`, `-no-fragments`, `-all-root`.
 - `xorriso` is called with `-set_all_file_dates 0`.
-- Network package installation is disabled by default during ISO build.
-- If required packages are missing from the input rootfs, you can opt in to
-  network fallback with `ALLOW_APT_NETWORK=1` (mirror-dependent, non-deterministic).
 - IPv6 is disabled (`ipv6.disable=1`) in all kernel command lines.
+
+> **Note on network access during build:** The pipeline is offline by default when
+> the input rootfs already contains `live-boot`/`live-config` and a kernel.  Two
+> scripts perform an `apt-get` install as an automatic fallback only when those
+> components are absent from the rootfs (`ensure-live-boot.sh`) or when no kernel
+> image is present (`build-kernel.sh`).  Pre-building a complete rootfs with
+> `dayshield-rootfs` avoids both fallback paths.
 
 ---
 

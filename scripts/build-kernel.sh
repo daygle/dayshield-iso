@@ -61,11 +61,12 @@ if [[ -z "${VMLINUZ}" ]]; then
     }
     trap cleanup_kernel_mounts EXIT
 
+    # shellcheck disable=SC2016  # $1 is intentionally expanded by the inner sh
     chroot "${ROOTFS_DIR}" /bin/sh -c \
         'LANG=C LC_ALL=C apt-get -qq update && LANG=C LC_ALL=C apt-get -qq -y \
             -o APT::Install-Recommends=false \
             -o APT::Install-Suggests=false \
-            install linux-image-amd64'
+            install "linux-image-$1"' -- "${ARCH}"
 
     cleanup_kernel_mounts
     trap - EXIT
@@ -86,9 +87,15 @@ if [[ -z "${KVER}" ]] || [[ "${KVER}" == "vmlinuz" ]]; then
     echo "       Expected a kernel named 'vmlinuz-<version>'." >&2
     exit 1
 fi
-INITRD="$(find "${ROOTFS_DIR}/boot" -maxdepth 1 -name "initrd.img-${KVER}" -type f 2>/dev/null \
-          || find "${ROOTFS_DIR}/boot" -maxdepth 1 -name 'initrd.img*' -type f 2>/dev/null \
-          | grep -v '\-rt' | sort -V | tail -n1 || true)"
+# Find an initrd that matches the selected kernel version exactly; fall back to
+# the most-recent non-RT initrd.  Two separate find calls are used because find
+# exits 0 even when nothing matches, so the || operator cannot trigger the
+# fallback — we must check the result explicitly instead.
+INITRD="$(find "${ROOTFS_DIR}/boot" -maxdepth 1 -name "initrd.img-${KVER}" -type f 2>/dev/null | head -n1)"
+if [[ -z "${INITRD}" ]]; then
+    INITRD="$(find "${ROOTFS_DIR}/boot" -maxdepth 1 -name 'initrd.img*' -type f 2>/dev/null \
+              | grep -v '\-rt' | sort -V | tail -n1 || true)"
+fi
 
 echo "    kernel : ${VMLINUZ}"
 

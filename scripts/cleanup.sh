@@ -27,7 +27,4 @@ if [[ -f "${BUILD_DIR}/squashfs-rootfs.sqsh" ]]; then
     rm -f "${BUILD_DIR}/squashfs-rootfs.sqsh"
 fi
 
-# Remove any leftover temp dracut conf files
-rm -f /tmp/dayshield-dracut-*.conf 2>/dev/null || true
-
 echo "--> Cleanup complete."

@@ -57,8 +57,8 @@ find /var/lib/dhcp/ -name '*.leases' -delete 2>/dev/null || true
 find /var/lib/dhclient/ -name '*.leases' -delete 2>/dev/null || true
 
 # Reload network units
-systemctl daemon-reload 2>/dev/null || true
-systemctl restart systemd-networkd 2>/dev/null || true
+systemctl daemon-reload || echo "WARNING: daemon-reload failed" >&2
+systemctl restart systemd-networkd || echo "WARNING: systemd-networkd restart failed" >&2
 
 # ---------------------------------------------------------------------------
 # 5. Start dayshield-core
