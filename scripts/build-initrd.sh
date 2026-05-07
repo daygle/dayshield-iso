@@ -39,6 +39,14 @@ if [[ -z "${KVER}" ]]; then
 fi
 
 KERNEL_VERSION="${KVER}"
+if [[ -n "${KERNEL_VERSION}" ]] && [[ ! "${KERNEL_VERSION}" =~ ^[A-Za-z0-9._+-]+$ ]]; then
+    echo "ERROR: Invalid kernel version string: ${KERNEL_VERSION}" >&2
+    exit 1
+fi
+if [[ "${KERNEL_VERSION}" == *".."* ]]; then
+    echo "ERROR: Invalid kernel version string contains '..': ${KERNEL_VERSION}" >&2
+    exit 1
+fi
 
 echo "--> Building initrd (kernel: ${KERNEL_VERSION:-unknown}) …"
 

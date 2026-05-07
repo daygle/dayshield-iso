@@ -7,7 +7,6 @@
 #   3. Optionally boot under QEMU in BIOS and UEFI mode
 
 set -euo pipefail
-# shellcheck disable=SC2317
 
 ISO=""
 QEMU_TEST=false
@@ -55,7 +54,13 @@ check() {
 # shellcheck disable=SC2317
 is_pe_efi_binary() {
     local file="$1"
-    od -A n -N 2 -t x1 "${file}" 2>/dev/null | grep -qi "4d 5a"
+    # "4d 5a" is ASCII "MZ", the DOS/PE executable header signature.
+    local pe_offset
+    od -A n -N 2 -t x1 "${file}" 2>/dev/null | grep -qi "4d 5a" || return 1
+    # Offset 0x3C (decimal 60) stores the PE header location in DOS/PE files.
+    pe_offset="$(od -An -j 60 -N 4 -tu4 "${file}" 2>/dev/null | tr -d '[:space:]')"
+    [[ "${pe_offset}" =~ ^[0-9]+$ ]] || return 1
+    od -A n -j "${pe_offset}" -N 4 -t x1 "${file}" 2>/dev/null | grep -qi "50 45 00 00"
 }
 
 # shellcheck disable=SC2317
@@ -91,7 +96,7 @@ qemu_boot_probe() {
                 >"${log_file}" 2>&1 || true
     fi
 
-    if head -n 30 "${log_file}" | grep -Eqi "grub|linux|boot"; then
+    if grep -Eqi 'GNU GRUB|Linux version [0-9]|Booting .*DayShield|loading linux' "${log_file}"; then
         rm -f "${log_file}"
         return 0
     fi

@@ -44,7 +44,7 @@ require_root() {
 
 valid_hostname() {
     local hostname="$1"
-    [[ "${hostname}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,62})$ ]]
+    [[ "${hostname}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$ ]]
 }
 
 valid_iface_name() {
@@ -288,7 +288,13 @@ truncate -s 0 "${TARGET_MOUNT}/etc/machine-id"
 info "Configuring hostname and root password …"
 printf '%s\n' "${INSTALL_HOSTNAME}" > "${TARGET_MOUNT}/etc/hostname"
 if grep -q '^127\.0\.1\.1[[:space:]]' "${TARGET_MOUNT}/etc/hosts" 2>/dev/null; then
-    sed -i "s/^127\.0\.1\.1[[:space:]].*/127.0.1.1 ${INSTALL_HOSTNAME}/" "${TARGET_MOUNT}/etc/hosts"
+    awk -v host="${INSTALL_HOSTNAME}" '
+        BEGIN { done=0 }
+        /^127\.0\.1\.1[[:space:]]/ { print "127.0.1.1 " host; done=1; next }
+        { print }
+        END { if (!done) print "127.0.1.1 " host }
+    ' "${TARGET_MOUNT}/etc/hosts" > "${TARGET_MOUNT}/etc/hosts.tmp"
+    mv "${TARGET_MOUNT}/etc/hosts.tmp" "${TARGET_MOUNT}/etc/hosts"
 else
     printf '127.0.1.1 %s\n' "${INSTALL_HOSTNAME}" >> "${TARGET_MOUNT}/etc/hosts"
 fi

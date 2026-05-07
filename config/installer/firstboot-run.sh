@@ -64,8 +64,14 @@ systemctl restart systemd-networkd 2>/dev/null || true
 # 5. Start dayshield-core
 # ---------------------------------------------------------------------------
 echo "--> Starting dayshield-core …"
-systemctl enable dayshield.service
-systemctl start dayshield.service
+systemctl enable dayshield.service || {
+    echo "[ERROR] Failed to enable dayshield.service" >&2
+    exit 1
+}
+systemctl start dayshield.service || {
+    echo "[ERROR] Failed to start dayshield.service" >&2
+    exit 1
+}
 
 # ---------------------------------------------------------------------------
 # 6. Remove firstboot marker
