@@ -5,7 +5,8 @@
 #   make verify ISO=dayshield.iso
 #   make clean
 
-SHELL := /usr/bin/env bash -euo pipefail
+SHELL := /usr/bin/env bash
+.SHELLFLAGS := -euo pipefail -c
 
 # Inputs / outputs
 ROOTFS       ?= rootfs.tar.zst

@@ -12,7 +12,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${BUILD_DIR:="${SCRIPT_DIR}/../build"}"
 : "${CONFIG_DIR:="${SCRIPT_DIR}/../config"}"
-: "${ARCH:="amd64"}"
 
 BOOT_DIR="${BUILD_DIR}/bootloader"
 GRUB_BIOS_DIR="${BOOT_DIR}/boot/grub"
@@ -129,7 +128,8 @@ echo "--> Copying x86_64-efi GRUB modules …"
 mkdir -p "${GRUB_BIOS_DIR}/x86_64-efi"
 cp "${GRUB_X64_LIB}"/*.mod "${GRUB_BIOS_DIR}/x86_64-efi/" 2>/dev/null || true
 [[ -f "${GRUB_X64_LIB}/moddep.lst" ]] && cp "${GRUB_X64_LIB}/moddep.lst" "${GRUB_BIOS_DIR}/x86_64-efi/"
-echo "    Modules: $(ls "${GRUB_BIOS_DIR}/x86_64-efi/" | wc -l) files"
+MODULE_COUNT="$(find "${GRUB_BIOS_DIR}/x86_64-efi/" -mindepth 1 -maxdepth 1 -type f | wc -l)"
+echo "    Modules: ${MODULE_COUNT} files"
 
 # Build the FAT EFI System Partition image (efiboot.img)
 EFI_IMG="${BOOT_DIR}/EFI/efiboot.img"

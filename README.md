@@ -396,7 +396,6 @@ dayshield-iso/
 |   `-- verify.sh                 # Content and boot verification
 |-- config/
 |   |-- grub.cfg                  # GRUB boot menu
-|   |-- isolinux.cfg              # ISOLINUX/SYSLINUX fallback menu
 |   `-- installer/
 |       |-- install.sh              # CLI installer orchestrator (fallback)
 |       |-- partition.sh            # GPT disk partitioning
@@ -466,9 +465,16 @@ The build pipeline enforces deterministic output:
 
 - All file timestamps are normalised to **epoch 0** (`1970-01-01T00:00:00Z`).
 - `mksquashfs` is called with `-mkfs-time 0`, `-no-fragments`, `-all-root`.
-- `xorriso` is called with `-set_all_file_dates 0`.
-- No network calls are made during the build.
+- Input trees are normalised to epoch timestamps before `xorriso` assembly.
+- By default, no network package fetches are performed during build steps.
 - IPv6 is disabled (`ipv6.disable=1`) in all kernel command lines.
+
+If your rootfs is missing a kernel or live-boot packages, you can explicitly
+opt into network fallbacks by setting:
+
+```sh
+ALLOW_NETWORK_FETCH=1 make iso ROOTFS=... INSTALLER_UI=...
+```
 
 ---
 
@@ -527,8 +533,7 @@ automatically starts the **web-based installer UI**:
 - `installer-ui-web.service` - serves the installer on `http://0.0.0.0:8443`
   (auto-enabled in `multi-user.target`)
 - `installer-ui.service` - opens a browser on `tty1` pointing at the above URL
-  (not auto-enabled by default, to avoid VM consoles appearing unresponsive
-  when tty ownership is transferred)
+  (auto-enabled in `multi-user.target`)
 
 Browser launch order if `installer-ui.service` is manually started on tty1:
 `epiphany-browser`, `firefox`, `chromium`, `surf`, then `midori`. If none are
@@ -622,4 +627,3 @@ npx tailwindcss -i styles.css -o dist/styles.css \
 | No IPv6 | `ipv6.disable=1` kernel parameter + dracut `omit_dracutmodules+=" ipv6 "` |
 | GPT partitioning | Required for UEFI; also supported by modern BIOS-boot GRUB |
 | ext4 root filesystem | Best compatibility with the Debian-based rootfs |
-

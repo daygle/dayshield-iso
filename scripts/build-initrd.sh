@@ -16,12 +16,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${BUILD_DIR:="${SCRIPT_DIR}/../build"}"
 : "${CONFIG_DIR:="${SCRIPT_DIR}/../config"}"
-: "${ARCH:="amd64"}"
 : "${USE_DRACUT:="0"}"
 
 KERNEL_DIR="${BUILD_DIR}/kernel"
 ROOTFS_DIR="${BUILD_DIR}/rootfs"
-INITRD_WORK="${BUILD_DIR}/initrd-work"
 INSTALLER_SRC="${CONFIG_DIR}/installer"
 
 # ---------------------------------------------------------------------------
@@ -30,7 +28,8 @@ INSTALLER_SRC="${CONFIG_DIR}/installer"
 # Prefer the modules directory name - it is the exact string the kernel and
 # dracut need, and avoids regex mis-truncation (e.g. 6.1.0-42-rt-amd64 vs
 # 6.1.0-42-rt).
-KVER="$(ls "${ROOTFS_DIR}/lib/modules/" 2>/dev/null | sort -V | tail -n1 || true)"
+KVER="$(find "${ROOTFS_DIR}/lib/modules" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null \
+    | sort -V | tail -n1 || true)"
 
 if [[ -z "${KVER}" ]]; then
     # Fallback: extract from the kernel binary
@@ -71,7 +70,7 @@ done
 if [[ "${USE_DRACUT}" == "1" ]] && command -v dracut &>/dev/null && [[ -n "${DRACUT_LIVE_MODULE}" ]]; then
     echo "--> Using dracut (dmsquash-live: ${DRACUT_LIVE_MODULE}) …"
 
-    DRACUT_CONF="$(mktemp --suffix=.conf)"
+    DRACUT_CONF="$(mktemp "/tmp/dayshield-dracut-XXXXXX.conf")"
     cat > "${DRACUT_CONF}" <<'EOF'
 # DayShield installer initrd configuration
 # 'network' is intentionally omitted - not available on all build hosts and
@@ -83,25 +82,22 @@ omit_dracutmodules+=" ipv6 bluetooth iscsi "
 compress="zstd"
 EOF
 
-    KVER_ARG=""
-    KMODDIR_ARG=""
+    DRACUT_ARGS=(
+        --conf "${DRACUT_CONF}"
+        --force
+        --no-hostonly
+        --add "dmsquash-live"
+    )
     if [[ -n "${KERNEL_VERSION}" ]]; then
-        KVER_ARG="--kver ${KERNEL_VERSION}"
+        DRACUT_ARGS+=(--kver "${KERNEL_VERSION}")
         # Point dracut at the rootfs modules - the build host won't have them
         MODULES_DIR="${ROOTFS_DIR}/lib/modules/${KERNEL_VERSION}"
         if [[ -d "${MODULES_DIR}" ]]; then
-            KMODDIR_ARG="--kmoddir ${MODULES_DIR}"
+            DRACUT_ARGS+=(--kmoddir "${MODULES_DIR}")
         fi
     fi
 
-    dracut \
-        --conf "${DRACUT_CONF}" \
-        --force \
-        --no-hostonly \
-        --add "dmsquash-live" \
-        ${KVER_ARG} \
-        ${KMODDIR_ARG} \
-        "${KERNEL_DIR}/initrd.img"
+    dracut "${DRACUT_ARGS[@]}" "${KERNEL_DIR}/initrd.img"
 
     rm -f "${DRACUT_CONF}"
 
@@ -162,7 +158,7 @@ HOOK
     trap cleanup_initrd_mounts EXIT
 
     INITRD_LOG="$(mktemp "${BUILD_DIR}/initrd-mkinitramfs-XXXXXX.log")"
-    if chroot "${ROOTFS_DIR}" /bin/sh -c 'mkinitramfs -o /tmp/initrd.img "$1"' -- "${KERNEL_VERSION}" >"${INITRD_LOG}" 2>&1; then
+    if chroot "${ROOTFS_DIR}" mkinitramfs -o /tmp/initrd.img "${KERNEL_VERSION}" >"${INITRD_LOG}" 2>&1; then
         grep -v "Couldn't identify type of root file system .* for fsck hook" "${INITRD_LOG}" || true
     else
         grep -v "Couldn't identify type of root file system .* for fsck hook" "${INITRD_LOG}" >&2 || true

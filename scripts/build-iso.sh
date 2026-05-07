@@ -15,6 +15,7 @@ ROOTFS=""
 OUTPUT="dayshield.iso"
 ARCH="amd64"
 INSTALLER_UI_DIR=""
+: "${ALLOW_NETWORK_FETCH:="0"}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -69,12 +70,13 @@ OUTPUT="$(cd "${OUTPUT_DIR}" && pwd -P)/$(basename "${OUTPUT}")"
 # Build directory (deterministic structure inside working directory)
 # ---------------------------------------------------------------------------
 BUILD_DIR="${REPO_ROOT}/build"
-export BUILD_DIR ARCH CONFIG_DIR REPO_ROOT
+export BUILD_DIR ARCH CONFIG_DIR REPO_ROOT ALLOW_NETWORK_FETCH
 
 echo "==> DayShield ISO Builder"
 echo "    rootfs  : ${ROOTFS}"
 echo "    output  : ${OUTPUT}"
 echo "    arch    : ${ARCH}"
+echo "    allow-network-fetch: ${ALLOW_NETWORK_FETCH}"
 echo "    build   : ${BUILD_DIR}"
 echo "    installer-ui: ${INSTALLER_UI_DIR}"
 

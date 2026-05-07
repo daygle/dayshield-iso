@@ -24,27 +24,37 @@ fi
 exec >> "${LOG_FILE}" 2>&1
 
 echo "==> DayShield first-boot initialisation: $(date -u)"
+FAILED=0
 
 # ---------------------------------------------------------------------------
 # 1. SSH host keys
 # ---------------------------------------------------------------------------
 echo "--> Regenerating SSH host keys …"
 rm -f /etc/ssh/ssh_host_*
-ssh-keygen -A
+if ! ssh-keygen -A; then
+    echo "[ERROR] Failed to regenerate SSH host keys."
+    FAILED=1
+fi
 
 # ---------------------------------------------------------------------------
 # 2. Unique machine-id
 # ---------------------------------------------------------------------------
 echo "--> Generating machine-id …"
-systemd-machine-id-setup --force 2>/dev/null || \
-    cat /proc/sys/kernel/random/uuid | tr -d '-' > /etc/machine-id
+if ! systemd-machine-id-setup --force 2>/dev/null; then
+    if ! tr -d '-' < /proc/sys/kernel/random/uuid > /etc/machine-id; then
+        echo "[ERROR] Failed to generate machine-id."
+        FAILED=1
+    fi
+fi
 
 # ---------------------------------------------------------------------------
 # 3. ACME / TLS keys (if dayshield-acme is installed)
 # ---------------------------------------------------------------------------
 if command -v dayshield-acme &>/dev/null; then
     echo "--> Regenerating ACME keys …"
-    dayshield-acme regenerate-keys || true
+    if ! dayshield-acme regenerate-keys; then
+        echo "[WARN] Failed to regenerate ACME keys."
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -57,20 +67,35 @@ find /var/lib/dhcp/ -name '*.leases' -delete 2>/dev/null || true
 find /var/lib/dhclient/ -name '*.leases' -delete 2>/dev/null || true
 
 # Reload network units
-systemctl daemon-reload 2>/dev/null || true
-systemctl restart systemd-networkd 2>/dev/null || true
+if ! systemctl daemon-reload 2>/dev/null; then
+    echo "[WARN] Failed to reload systemd units."
+fi
+if ! systemctl restart systemd-networkd 2>/dev/null; then
+    echo "[WARN] Failed to restart systemd-networkd."
+fi
 
 # ---------------------------------------------------------------------------
 # 5. Start dayshield-core
 # ---------------------------------------------------------------------------
 echo "--> Starting dayshield-core …"
-systemctl enable dayshield.service 2>/dev/null || true
-systemctl start  dayshield.service 2>/dev/null || true
+if ! systemctl enable dayshield.service 2>/dev/null; then
+    echo "[ERROR] Failed to enable dayshield.service."
+    FAILED=1
+fi
+if ! systemctl start dayshield.service 2>/dev/null; then
+    echo "[ERROR] Failed to start dayshield.service."
+    FAILED=1
+fi
 
 # ---------------------------------------------------------------------------
 # 6. Remove firstboot marker
 # ---------------------------------------------------------------------------
-echo "--> Removing firstboot marker …"
-rm -f "${FIRSTBOOT_MARKER}"
+if [[ ${FAILED} -eq 0 ]]; then
+    echo "--> Removing firstboot marker …"
+    rm -f "${FIRSTBOOT_MARKER}"
+else
+    echo "--> First-boot encountered errors; keeping marker for retry."
+    exit 1
+fi
 
 echo "==> First-boot initialisation complete: $(date -u)"

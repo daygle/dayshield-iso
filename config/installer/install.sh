@@ -31,11 +31,42 @@ exec > >(tee -a "${LOG_FILE}") 2>&1
 # Helpers
 # ---------------------------------------------------------------------------
 info()  { echo "[INFO]  $*"; }
-warn()  { echo "[WARN]  $*" >&2; }
 error() { echo "[ERROR] $*" >&2; exit 1; }
 
 require_root() {
     [[ "${EUID}" -eq 0 ]] || error "This installer must be run as root."
+}
+
+cleanup_install_mounts() {
+    for _fs in run sys proc dev/pts dev; do
+        umount -lf "${TARGET_MOUNT}/${_fs}" 2>/dev/null || true
+    done
+    umount -lf "${TARGET_MOUNT}/boot/efi" 2>/dev/null || true
+    umount -R "${TARGET_MOUNT}" 2>/dev/null || true
+}
+
+collect_install_configuration() {
+    if [[ "${DAYSHIELD_UNATTENDED:-}" == "1" ]]; then
+        INSTALL_HOSTNAME="${DAYSHIELD_HOSTNAME:-dayshield}"
+        ROOT_PASSWORD="${DAYSHIELD_ROOT_PASSWORD:-}"
+        [[ -n "${ROOT_PASSWORD}" ]] || \
+            error "DAYSHIELD_ROOT_PASSWORD is required when DAYSHIELD_UNATTENDED=1."
+        return
+    fi
+
+    read -rp "Hostname [dayshield]: " INSTALL_HOSTNAME
+    INSTALL_HOSTNAME="${INSTALL_HOSTNAME:-dayshield}"
+    [[ "${INSTALL_HOSTNAME}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$ ]] || \
+        error "Invalid hostname: ${INSTALL_HOSTNAME}"
+
+    local pw1 pw2
+    read -rsp "Root password: " pw1
+    echo ""
+    read -rsp "Confirm root password: " pw2
+    echo ""
+    [[ -n "${pw1}" ]] || error "Root password cannot be empty."
+    [[ "${pw1}" == "${pw2}" ]] || error "Root passwords do not match."
+    ROOT_PASSWORD="${pw1}"
 }
 
 detect_target_disk() {
@@ -45,14 +76,24 @@ detect_target_disk() {
              | awk '$2=="disk" && $3=="0" {print "/dev/" $1}')"
 
     # Exclude the current boot device (the ISO)
+    local boot_source
     local boot_dev
-    boot_dev="$(lsblk -n -o NAME,MOUNTPOINT \
-                | awk '$2=="/run/live/medium" || $2=="/media/cdrom" {print $1}' \
-                | head -n1 | sed 's/[0-9]*$//' || true)"
+    local boot_pkname
+    boot_source="$(findmnt -n -o SOURCE /run/live/medium 2>/dev/null || \
+                   findmnt -n -o SOURCE /media/cdrom 2>/dev/null || true)"
+    boot_dev=""
+    if [[ -n "${boot_source}" ]] && [[ "${boot_source}" == /dev/* ]]; then
+        boot_pkname="$(lsblk -ndo PKNAME "${boot_source}" 2>/dev/null || true)"
+        if [[ -n "${boot_pkname}" ]]; then
+            boot_dev="/dev/${boot_pkname}"
+        else
+            boot_dev="${boot_source}"
+        fi
+    fi
 
     local candidates=()
     while IFS= read -r dev; do
-        [[ -n "${boot_dev}" ]] && [[ "${dev}" == *"${boot_dev}"* ]] && continue
+        [[ -n "${boot_dev}" ]] && [[ "${dev}" == "${boot_dev}" ]] && continue
         candidates+=("${dev}")
     done <<< "${disks}"
 
@@ -72,7 +113,9 @@ detect_target_disk() {
         done
         read -rp "Select disk [0]: " sel
         sel="${sel:-0}"
-        TARGET_DISK="${candidates[${sel}]}"
+        [[ "${sel}" =~ ^[0-9]+$ ]] || error "Invalid disk selection: ${sel}"
+        (( sel < ${#candidates[@]} )) || error "Disk selection out of range: ${sel}"
+        TARGET_DISK="${candidates[sel]}"
         info "Selected target disk: ${TARGET_DISK}"
     fi
 }
@@ -81,6 +124,7 @@ detect_target_disk() {
 # Main installation flow
 # ---------------------------------------------------------------------------
 require_root
+trap cleanup_install_mounts EXIT
 
 TARGET_DISK="${DAYSHIELD_TARGET_DISK:-}"
 
@@ -98,6 +142,8 @@ if [[ "${DAYSHIELD_UNATTENDED:-}" != "1" ]]; then
     read -rp "Type 'yes' to continue: " confirm
     [[ "${confirm}" == "yes" ]] || error "Installation cancelled."
 fi
+
+collect_install_configuration
 
 # ---------------------------------------------------------------------------
 # Partition
@@ -149,13 +195,6 @@ for _fs in dev dev/pts proc sys run; do
     mount --bind "/${_fs}" "${TARGET_MOUNT}/${_fs}"
 done
 
-cleanup_chroot_mounts() {
-    for _fs in run sys proc dev/pts dev; do
-        umount -lf "${TARGET_MOUNT}/${_fs}" 2>/dev/null || true
-    done
-}
-trap cleanup_chroot_mounts EXIT
-
 info "Purging live-boot / live-config packages from target …"
 chroot "${TARGET_MOUNT}" /bin/sh -c 'dpkg --configure -a 2>/dev/null || true'
 chroot "${TARGET_MOUNT}" /bin/sh -c \
@@ -175,9 +214,6 @@ rm -rf \
 info "Regenerating initramfs inside target …"
 chroot "${TARGET_MOUNT}" update-initramfs -u -k all
 
-cleanup_chroot_mounts
-trap - EXIT
-
 # ---------------------------------------------------------------------------
 # Configure target system
 # ---------------------------------------------------------------------------
@@ -185,6 +221,11 @@ trap - EXIT
 # Write a fresh machine-id (will be fully regenerated on first boot by systemd)
 info "Writing machine-id …"
 truncate -s 0 "${TARGET_MOUNT}/etc/machine-id"
+
+info "Setting hostname and root password …"
+printf '%s\n' "${INSTALL_HOSTNAME}" > "${TARGET_MOUNT}/etc/hostname"
+printf 'root:%s\n' "${ROOT_PASSWORD}" | chroot "${TARGET_MOUNT}" chpasswd
+unset ROOT_PASSWORD
 
 # Write fstab
 info "Writing /etc/fstab …"
@@ -297,5 +338,6 @@ info "Syncing filesystems …"
 sync
 info "Unmounting target …"
 umount -R "${TARGET_MOUNT}"
+trap - EXIT
 
 info "Installation complete. Remove the installation medium and reboot."

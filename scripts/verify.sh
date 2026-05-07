@@ -51,18 +51,33 @@ check() {
     fi
 }
 
+# shellcheck disable=SC2317
+is_efi_binary() {
+    od -A n -N 2 -t x1 "$1" 2>/dev/null | grep -qi "4d 5a"
+}
+
+# shellcheck disable=SC2317
+has_populated_bin_dir() {
+    local dir
+    for dir in "$@"; do
+        if [[ -d "${dir}" ]] && find "${dir}" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null | grep -q .; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # ---------------------------------------------------------------------------
 # Mount the ISO read-only
 # ---------------------------------------------------------------------------
 ISO_MOUNT="$(mktemp -d)"
 mount -o loop,ro "${ISO}" "${ISO_MOUNT}"
+# shellcheck disable=SC2317
 _cleanup() {
-    local _rc=$?
     umount "${SQ_MOUNT:-}" 2>/dev/null || true
     rm -rf  "${SQ_MOUNT:-}" 2>/dev/null || true
     umount "${ISO_MOUNT}" 2>/dev/null || true
     rm -rf  "${ISO_MOUNT}" 2>/dev/null || true
-    exit "${_rc}"
 }
 trap '_cleanup' EXIT
 
@@ -88,7 +103,7 @@ fi
 check "EFI/BOOT/BOOTX64.EFI exists"        test -f "${ISO_MOUNT}/EFI/BOOT/BOOTX64.EFI"
 check "EFI/BOOT/BOOTX64.EFI is non-empty"  test -s "${ISO_MOUNT}/EFI/BOOT/BOOTX64.EFI"
 check "EFI/BOOT/BOOTX64.EFI is PE32+ EFI" \
-    bash -c 'od -A n -N 2 -t x1 "${1}" 2>/dev/null | grep -qi "4d 5a"' -- "${ISO_MOUNT}/EFI/BOOT/BOOTX64.EFI"
+    is_efi_binary "${ISO_MOUNT}/EFI/BOOT/BOOTX64.EFI"
 check "EFI/efiboot.img exists"            test -f "${ISO_MOUNT}/EFI/efiboot.img"
 check "installer/install.sh exists"        test -f "${ISO_MOUNT}/installer/install.sh"
 check "installer/partition.sh exists"      test -f "${ISO_MOUNT}/installer/partition.sh"
@@ -113,7 +128,7 @@ mount -t squashfs -o loop,ro \
     "${ISO_MOUNT}/live/filesystem.squashfs" "${SQ_MOUNT}" 2>/dev/null
 check "squashfs mounts without error"          test -f "${SQ_MOUNT}/etc/os-release"
 check "squashfs /bin or /usr/bin is populated" \
-    bash -c 'ls "${SQ_MOUNT}/bin" "${SQ_MOUNT}/usr/bin" &>/dev/null'
+    has_populated_bin_dir "${SQ_MOUNT}/bin" "${SQ_MOUNT}/usr/bin"
 check "squashfs /usr/lib/dayshield-installer/install.sh exists" \
     test -f "${SQ_MOUNT}/usr/lib/dayshield-installer/install.sh"
 check "squashfs /usr/lib/dayshield-installer/firstboot-run.sh exists" \
@@ -180,20 +195,24 @@ if ${QEMU_TEST}; then
         QEMU_TIMEOUT=90
 
         echo "  Testing BIOS boot …"
-        timeout "${QEMU_TIMEOUT}" \
+        if timeout "${QEMU_TIMEOUT}" \
             qemu-system-x86_64 \
                 -nographic \
                 -no-reboot \
                 -m 1024M \
                 -cdrom "${ISO}" \
                 -boot d \
-                2>&1 | head -n 30 | grep -qi "grub\|linux\|boot" \
-            && echo "  [PASS] BIOS QEMU shows boot output" \
-            || echo "  [WARN] BIOS QEMU boot output not detected (may still work)"
+                2>&1 | head -n 30 | grep -qi "grub\|linux\|boot"; then
+            echo "  [PASS] BIOS QEMU shows boot output"
+            PASS=$(( PASS + 1 ))
+        else
+            echo "  [FAIL] BIOS QEMU boot output not detected"
+            FAIL=$(( FAIL + 1 ))
+        fi
 
         if [[ -n "${OVMF_PATH}" ]] && [[ -f "${OVMF_PATH}" ]]; then
             echo "  Testing UEFI boot …"
-            timeout "${QEMU_TIMEOUT}" \
+            if timeout "${QEMU_TIMEOUT}" \
                 qemu-system-x86_64 \
                     -nographic \
                     -no-reboot \
@@ -201,9 +220,13 @@ if ${QEMU_TEST}; then
                     -bios "${OVMF_PATH}" \
                     -cdrom "${ISO}" \
                     -boot d \
-                    2>&1 | head -n 30 | grep -qi "grub\|linux\|boot" \
-                && echo "  [PASS] UEFI QEMU shows boot output" \
-                || echo "  [WARN] UEFI QEMU boot output not detected (may still work)"
+                    2>&1 | head -n 30 | grep -qi "grub\|linux\|boot"; then
+                echo "  [PASS] UEFI QEMU shows boot output"
+                PASS=$(( PASS + 1 ))
+            else
+                echo "  [FAIL] UEFI QEMU boot output not detected"
+                FAIL=$(( FAIL + 1 ))
+            fi
         else
             echo "  [SKIP] UEFI test skipped (use --ovmf /path/to/OVMF.fd)"
         fi

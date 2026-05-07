@@ -3,7 +3,7 @@
 #
 # Security guarantees:
 #   • No device nodes created (--no-same-owner combined with explicit exclusions)
-#   • No unexpected SUID/SGID binaries added
+#   • Reports unexpected SUID/SGID binaries so builds can be reviewed
 #   • Deterministic permissions (umask 022)
 
 set -euo pipefail
