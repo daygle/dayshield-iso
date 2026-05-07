@@ -14,6 +14,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${BUILD_DIR:="${SCRIPT_DIR}/../build"}"
 : "${CONFIG_DIR:="${SCRIPT_DIR}/../config"}"
+# shellcheck source=scripts/installer-ui-common.sh
+source "${SCRIPT_DIR}/installer-ui-common.sh"
 
 OUTPUT=""
 ROOTFS_ARCHIVE=""
@@ -37,30 +39,6 @@ KERNEL_DIR="${BUILD_DIR}/kernel"
 SQUASHFS_IMG="${BUILD_DIR}/squashfs-rootfs.sqsh"
 BOOT_DIR="${BUILD_DIR}/bootloader"
 INSTALLER_SRC="${CONFIG_DIR}/installer"
-
-prune_installer_ui_tree() {
-    local ui_root="$1"
-    rm -rf \
-        "${ui_root}/.git" \
-        "${ui_root}/.github" \
-        "${ui_root}/node_modules"
-    find "${ui_root}" -type f \( \
-        -name '.env' -o \
-        -name '.env.*' -o \
-        -name '*.map' -o \
-        -name '*.test.*' -o \
-        -name '*.spec.*' -o \
-        -name 'package.json' -o \
-        -name 'package-lock.json' -o \
-        -name 'pnpm-lock.yaml' -o \
-        -name 'yarn.lock' -o \
-        -name 'tsconfig*.json' -o \
-        -name 'vite.config.*' -o \
-        -name 'tailwind.config.*' -o \
-        -name 'README*' -o \
-        -name 'LICENSE*' \
-    \) -delete 2>/dev/null || true
-}
 
 # ---------------------------------------------------------------------------
 # Validate required artefacts

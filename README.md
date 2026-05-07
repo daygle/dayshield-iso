@@ -588,6 +588,10 @@ DAYSHIELD_LAN_IFACE=enp2s0 \
 /usr/lib/dayshield-installer/install.sh
 ```
 
+The installer sets the installed system's hostname and root password, and
+installs an SSH configuration drop-in that explicitly allows root login with
+password authentication.
+
 ### First boot (after install)
 
 - SSH host keys are regenerated
