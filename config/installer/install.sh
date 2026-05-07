@@ -359,7 +359,9 @@ info "Configuring hostname: ${INSTALL_HOSTNAME} …"
 echo "${INSTALL_HOSTNAME}" > "${TARGET_MOUNT}/etc/hostname"
 # Ensure /etc/hosts has a 127.0.1.1 entry for the new hostname.
 if [[ -f "${TARGET_MOUNT}/etc/hosts" ]]; then
-    if ! grep -qF "127.0.1.1" "${TARGET_MOUNT}/etc/hosts"; then
+    if grep -Eq '^[[:space:]]*127\.0\.1\.1([[:space:]]|$)' "${TARGET_MOUNT}/etc/hosts"; then
+        sed -Ei "s|^[[:space:]]*127\\.0\\.1\\.1([[:space:]].*)?$|127.0.1.1\t${INSTALL_HOSTNAME}|" "${TARGET_MOUNT}/etc/hosts"
+    else
         printf '127.0.1.1\t%s\n' "${INSTALL_HOSTNAME}" >> "${TARGET_MOUNT}/etc/hosts"
     fi
 else
