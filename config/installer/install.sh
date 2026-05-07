@@ -463,6 +463,46 @@ rm -f "${TARGET_MOUNT}/etc/resolv.conf"
 printf 'nameserver 127.0.0.1\n' > "${TARGET_MOUNT}/etc/resolv.conf"
 
 # ---------------------------------------------------------------------------
+# Hostname and root password configuration
+# ---------------------------------------------------------------------------
+HOSTNAME_VALUE="${DAYSHIELD_HOSTNAME:-dayshield}"
+# RFC 1123-ish hostname validation:
+# - labels are alnum plus interior hyphens
+# - each label <=63 chars
+# - labels separated by dots
+if [[ ! "${HOSTNAME_VALUE}" =~ ^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(\.([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))*$ ]]; then
+    error "Invalid hostname: ${HOSTNAME_VALUE}"
+fi
+printf '%s\n' "${HOSTNAME_VALUE}" > "${TARGET_MOUNT}/etc/hostname"
+cat > "${TARGET_MOUNT}/etc/hosts" <<EOF
+127.0.0.1 localhost
+127.0.1.1 ${HOSTNAME_VALUE}
+::1 localhost ip6-localhost ip6-loopback
+EOF
+
+ROOT_PASSWORD_HASH="${DAYSHIELD_ROOT_PASSWORD_HASH:-}"
+if [[ -n "${ROOT_PASSWORD_HASH}" ]]; then
+    printf 'root:%s\n' "${ROOT_PASSWORD_HASH}" | chroot "${TARGET_MOUNT}" chpasswd -e
+elif [[ "${DAYSHIELD_UNATTENDED:-}" == "1" ]]; then
+    error "DAYSHIELD_UNATTENDED=1 requires DAYSHIELD_ROOT_PASSWORD_HASH."
+else
+    while true; do
+        read -rsp "Enter root password for installed system: " ROOT_PASSWORD
+        echo ""
+        read -rsp "Confirm root password: " ROOT_PASSWORD_CONFIRM
+        echo ""
+        [[ -n "${ROOT_PASSWORD}" ]] || { echo "Password cannot be empty."; continue; }
+        [[ "${ROOT_PASSWORD}" == "${ROOT_PASSWORD_CONFIRM}" ]] || { echo "Passwords do not match."; continue; }
+        if ! printf 'root:%s\n' "${ROOT_PASSWORD}" | chroot "${TARGET_MOUNT}" chpasswd; then
+            unset ROOT_PASSWORD ROOT_PASSWORD_CONFIRM
+            error "Failed to set root password in target system."
+        fi
+        unset ROOT_PASSWORD ROOT_PASSWORD_CONFIRM
+        break
+    done
+fi
+
+# ---------------------------------------------------------------------------
 # Firstboot marker
 # ---------------------------------------------------------------------------
 info "Creating firstboot marker …"
