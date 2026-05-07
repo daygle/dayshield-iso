@@ -5,7 +5,8 @@
 #   make verify ISO=dayshield.iso
 #   make clean
 
-SHELL := /usr/bin/env bash -euo pipefail
+SHELL        := /usr/bin/env bash
+.SHELLFLAGS  := -euo pipefail -c
 
 # Inputs / outputs
 ROOTFS       ?= rootfs.tar.zst
@@ -73,7 +74,7 @@ lint: ## Run ShellCheck on all shell scripts
 	@$(SHELLCHECK) $(SHELLCHECK_FILES)
 
 distclean: clean ## Remove build artefacts AND the generated ISO
-	rm -f "$(OUTPUT)"
+	rm -f "$(OUTPUT)" "$(OUTPUT).md5" "$(OUTPUT).sha256"
 
 ##@ Help
 

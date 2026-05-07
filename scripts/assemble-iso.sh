@@ -173,6 +173,7 @@ xorriso -as mkisofs \
     -volid "DAYSHIELD" \
     -publisher "DayShield Project" \
     -appid "DayShield Firewall OS Installer" \
+    -set_all_file_dates 0 \
     ${BIOS_ELTORITO_ARGS[@]+"${BIOS_ELTORITO_ARGS[@]}"} \
     ${XORRISO_EXTRA_ARGS[@]+"${XORRISO_EXTRA_ARGS[@]}"} \
     -output "${OUTPUT}" \

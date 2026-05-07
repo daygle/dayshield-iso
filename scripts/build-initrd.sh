@@ -21,7 +21,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 KERNEL_DIR="${BUILD_DIR}/kernel"
 ROOTFS_DIR="${BUILD_DIR}/rootfs"
-INITRD_WORK="${BUILD_DIR}/initrd-work"
 INSTALLER_SRC="${CONFIG_DIR}/installer"
 
 # ---------------------------------------------------------------------------

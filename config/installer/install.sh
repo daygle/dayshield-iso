@@ -100,6 +100,32 @@ if [[ "${DAYSHIELD_UNATTENDED:-}" != "1" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# Collect configuration (hostname + root password) before touching the disk
+# ---------------------------------------------------------------------------
+if [[ "${DAYSHIELD_UNATTENDED:-}" != "1" ]]; then
+    read -rp "Enter hostname [dayshield]: " INSTALL_HOSTNAME
+    INSTALL_HOSTNAME="${INSTALL_HOSTNAME:-dayshield}"
+
+    while true; do
+        read -rsp "Enter root password: " _root_pass1
+        echo
+        read -rsp "Confirm root password: " _root_pass2
+        echo
+        if [[ "${_root_pass1}" == "${_root_pass2}" ]] && [[ -n "${_root_pass1}" ]]; then
+            INSTALL_ROOT_PASSWORD="${_root_pass1}"
+            unset _root_pass1 _root_pass2
+            break
+        fi
+        warn "Passwords do not match or are empty. Please try again."
+    done
+else
+    INSTALL_HOSTNAME="${DAYSHIELD_HOSTNAME:-dayshield}"
+    # In unattended mode the root password must be supplied explicitly.
+    : "${DAYSHIELD_ROOT_PASSWORD:?DAYSHIELD_ROOT_PASSWORD must be set when DAYSHIELD_UNATTENDED=1}"
+    INSTALL_ROOT_PASSWORD="${DAYSHIELD_ROOT_PASSWORD}"
+fi
+
+# ---------------------------------------------------------------------------
 # Partition
 # ---------------------------------------------------------------------------
 info "Partitioning ${TARGET_DISK} …"
@@ -133,6 +159,19 @@ mkdir -p "${TARGET_MOUNT}"
 mount "${ROOT_PART}" "${TARGET_MOUNT}"
 mkdir -p "${TARGET_MOUNT}/boot/efi"
 mount "${EFI_PART}" "${TARGET_MOUNT}/boot/efi"
+
+# Register a top-level cleanup trap so that target partitions are always
+# unmounted on any subsequent failure, including from sub-scripts.
+cleanup_all_mounts() {
+    # Pseudo-filesystems (may or may not be mounted at this point)
+    for _fs in run sys proc dev/pts dev; do
+        umount -lf "${TARGET_MOUNT}/${_fs}" 2>/dev/null || true
+    done
+    # Target partitions
+    umount -lf "${TARGET_MOUNT}/boot/efi" 2>/dev/null || true
+    umount -lf "${TARGET_MOUNT}" 2>/dev/null || true
+}
+trap cleanup_all_mounts EXIT
 
 # ---------------------------------------------------------------------------
 # Extract rootfs
@@ -175,8 +214,27 @@ rm -rf \
 info "Regenerating initramfs inside target …"
 chroot "${TARGET_MOUNT}" update-initramfs -u -k all
 
+# ---------------------------------------------------------------------------
+# Configure hostname and root password (while chroot bind mounts are active)
+# ---------------------------------------------------------------------------
+info "Configuring hostname: ${INSTALL_HOSTNAME} …"
+echo "${INSTALL_HOSTNAME}" > "${TARGET_MOUNT}/etc/hostname"
+# Ensure /etc/hosts has a 127.0.1.1 entry for the new hostname.
+if [[ -f "${TARGET_MOUNT}/etc/hosts" ]]; then
+    if ! grep -qF "127.0.1.1" "${TARGET_MOUNT}/etc/hosts"; then
+        printf '127.0.1.1\t%s\n' "${INSTALL_HOSTNAME}" >> "${TARGET_MOUNT}/etc/hosts"
+    fi
+else
+    printf '127.0.0.1\tlocalhost\n127.0.1.1\t%s\n' "${INSTALL_HOSTNAME}" \
+        > "${TARGET_MOUNT}/etc/hosts"
+fi
+
+info "Configuring root password …"
+printf 'root:%s\n' "${INSTALL_ROOT_PASSWORD}" | chroot "${TARGET_MOUNT}" chpasswd
+unset INSTALL_ROOT_PASSWORD
+
 cleanup_chroot_mounts
-trap - EXIT
+trap cleanup_all_mounts EXIT
 
 # ---------------------------------------------------------------------------
 # Configure target system
@@ -297,5 +355,6 @@ info "Syncing filesystems …"
 sync
 info "Unmounting target …"
 umount -R "${TARGET_MOUNT}"
+trap - EXIT
 
 info "Installation complete. Remove the installation medium and reboot."
