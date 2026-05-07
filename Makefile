@@ -74,7 +74,7 @@ lint: ## Run ShellCheck on all shell scripts
 	@$(SHELLCHECK) $(SHELLCHECK_FILES)
 
 distclean: clean ## Remove build artefacts AND the generated ISO
-	rm -f "$(OUTPUT)"
+	rm -f "$(OUTPUT)" "$(OUTPUT).md5" "$(OUTPUT).sha256"
 
 ##@ Help
 

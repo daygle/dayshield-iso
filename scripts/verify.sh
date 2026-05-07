@@ -122,7 +122,6 @@ check "installer-ui/httpd.conf exists"      test -f "${ISO_MOUNT}/installer-ui/h
 echo ""
 echo "--- squashfs mount ---"
 SQ_MOUNT="$(mktemp -d)"
-trap '_cleanup' EXIT
 
 mount -t squashfs -o loop,ro \
     "${ISO_MOUNT}/live/filesystem.squashfs" "${SQ_MOUNT}" 2>/dev/null

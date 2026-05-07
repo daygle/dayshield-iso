@@ -72,7 +72,7 @@ if [[ -z "${VMLINUZ}" ]]; then
         "LANG=C LC_ALL=C apt-get -qq update && LANG=C LC_ALL=C apt-get -qq -y \
             -o APT::Install-Recommends=false \
             -o APT::Install-Suggests=false \
-            install ${KERNEL_PACKAGE}"
+            install \"${KERNEL_PACKAGE}\""
 
     cleanup_kernel_mounts
     trap - EXIT
@@ -93,8 +93,10 @@ if [[ -z "${KVER}" ]] || [[ "${KVER}" == "vmlinuz" ]]; then
     echo "       Expected a kernel named 'vmlinuz-<version>'." >&2
     exit 1
 fi
-INITRD="$(find "${ROOTFS_DIR}/boot" -maxdepth 1 -name "initrd.img-${KVER}" -type f 2>/dev/null | head -n1 || true)"
+INITRD="$(find "${ROOTFS_DIR}/boot" -maxdepth 1 -name "initrd.img-${KVER}" -type f 2>/dev/null | head -n1)"
 if [[ -z "${INITRD}" ]]; then
+    # Use an explicit emptiness check here. Chaining with `||` on find can skip
+    # fallback resolution when find exits successfully but returns no matches.
     INITRD="$(find "${ROOTFS_DIR}/boot" -maxdepth 1 -name 'initrd.img*' -type f 2>/dev/null \
         | grep -v '\-rt' | sort -V | tail -n1 || true)"
 fi

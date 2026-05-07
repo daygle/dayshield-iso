@@ -296,8 +296,8 @@ qemu-system-x86_64 \
 Expected boot sequence: GRUB menu -> kernel messages -> systemd -> installer
 launched on tty1.
 
-> **Live session login** - username `root`, password `dayshield`.  This
-> default is set only for the live/installer environment and is not carried
+> **Live session login** - username `root`, password `dayshield`.  This default password
+> is set only for the live/installer environment and is not carried
 > forward to the installed system.  The installer's configure step sets the
 > real root password before first boot.
 
@@ -466,6 +466,7 @@ The build pipeline enforces deterministic output:
 - All file timestamps are normalised to **epoch 0** (`1970-01-01T00:00:00Z`).
 - `mksquashfs` is called with `-mkfs-time 0`, `-no-fragments`, `-all-root`.
 - Input trees are normalised to epoch timestamps before `xorriso` assembly.
+- `xorriso` is called with `-set_all_file_dates 0`.
 - By default, no network package fetches are performed during build steps.
 - IPv6 is disabled (`ipv6.disable=1`) in all kernel command lines.
 
