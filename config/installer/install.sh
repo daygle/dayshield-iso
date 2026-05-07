@@ -118,6 +118,23 @@ valid_iface_name() {
     [[ "${iface}" =~ ^[[:alnum:]_.:-]+$ ]]
 }
 
+valid_ipv4_cidr() {
+    local cidr="$1"
+    local ip prefix octet
+
+    [[ "${cidr}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]] || return 1
+
+    ip="${cidr%/*}"
+    prefix="${cidr#*/}"
+    (( prefix >= 0 && prefix <= 32 )) || return 1
+
+    IFS='.' read -r -a octets <<< "${ip}"
+    [[ ${#octets[@]} -eq 4 ]] || return 1
+    for octet in "${octets[@]}"; do
+        (( octet >= 0 && octet <= 255 )) || return 1
+    done
+}
+
 collect_install_configuration() {
     local unattended="${DAYSHIELD_UNATTENDED:-0}"
     local _wan_idx _lan_idx
@@ -404,6 +421,7 @@ info "Writing network configuration …"
 NETWORK_DIR="${TARGET_MOUNT}/etc/systemd/network"
 mkdir -p "${NETWORK_DIR}"
 LAN_CIDR="${DAYSHIELD_LAN_CIDR:-192.168.1.1/24}"
+valid_ipv4_cidr "${LAN_CIDR}" || error "Invalid LAN CIDR '${LAN_CIDR}'. Use IPv4 CIDR format like 192.168.1.1/24."
 
 # 10-wan.network — WAN interface with DHCP.
 cat > "${NETWORK_DIR}/10-wan.network" <<EOF
