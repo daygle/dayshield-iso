@@ -128,15 +128,13 @@ valid_ipv4_cidr() {
     ip="${cidr%/*}"
     prefix="${cidr#*/}"
     [[ "${ip}" != "${cidr}" ]] || return 1
-    [[ "${prefix}" =~ ^[0-9]{1,2}$ ]] || return 1
+    [[ "${prefix}" =~ ^([0-9]|[12][0-9]|3[0-2])$ ]] || return 1
 
     IFS='.' read -r -a octets <<< "${ip}"
     [[ ${#octets[@]} -eq 4 ]] || return 1
     for octet in "${octets[@]}"; do
-        [[ "${octet}" =~ ^[0-9]{1,3}$ ]] || return 1
-        [[ "${octet}" -ge 0 && "${octet}" -le 255 ]] || return 1
+        [[ "${octet}" =~ ^([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$ ]] || return 1
     done
-    [[ "${prefix}" -ge 0 && "${prefix}" -le 32 ]] || return 1
 }
 
 collect_install_configuration() {
