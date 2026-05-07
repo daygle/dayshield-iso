@@ -4,7 +4,8 @@ Deterministic, reproducible hybrid BIOS+UEFI bootable installer ISO for the
 **DayShield Firewall OS**.
 
 Takes the output of [dayshield-rootfs](https://github.com/daygle/dayshield-rootfs)
-(`rootfs.tar.zst`) and produces a checksum-verified, bit-for-bit reproducible `.iso` file.
+(`rootfs.tar.zst`) and produces a deterministic hybrid BIOS+UEFI installer `.iso`
+plus a SHA-256 checksum file.
 
 ---
 
@@ -40,6 +41,8 @@ apt-get install -y \
 curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain 1.88.0
 source "$HOME/.cargo/env"
 ```
+
+> Verify external downloads before executing them in production build environments.
 
 **Node.js / npm** (for building `dayshield-ui` if you want the installed-system UI) - install via the distro package or NodeSource for Node 18+.
 
@@ -190,7 +193,6 @@ This build now also writes checksum files next to the ISO:
 
 ```sh
 dayshield.iso.sha256
-dayshield.iso.md5
 ```
 
 The `INSTALLER_UI` path is for the live installer UI on the ISO.
@@ -321,7 +323,7 @@ Installation steps:
 3. **Format** - FAT32 EFI, ext4 root
 4. **Install rootfs** - extracts the rootfs archive from the ISO to the target
 5. **Install bootloader** - GRUB BIOS + UEFI on the target disk
-6. **Configure** - hostname, root password, primary network interface
+6. **Configure** - hostname, root password, WAN/LAN interfaces
 7. **Finalize** - unmounts, syncs
 8. **Reboot**
 
@@ -550,7 +552,7 @@ machine at `http://<live-ip>:8443/`.
 4. **Format** - FAT32 EFI + ext4 root
 5. **Install rootfs** - extracts `rootfs.tar.zst` from the ISO to the target
 6. **Install bootloader** - installs GRUB (BIOS + UEFI) on the target disk
-7. **Configure** - hostname, root password, primary network interface
+7. **Configure** - hostname, root password, WAN/LAN interfaces
 8. **Finalize** - unmounts, syncs, removes installer artefacts
 9. **Reboot**
 
@@ -565,6 +567,15 @@ If the web UI cannot be used, shell installer scripts are available under
 
 # Specify target disk explicitly
 DAYSHIELD_TARGET_DISK=/dev/sda /usr/lib/dayshield-installer/install.sh
+
+# Unattended install (requires explicit root password and interfaces)
+DAYSHIELD_UNATTENDED=1 \
+DAYSHIELD_TARGET_DISK=/dev/sda \
+DAYSHIELD_HOSTNAME=dayshield \
+DAYSHIELD_ROOT_PASSWORD='change-me' \
+DAYSHIELD_WAN_IFACE=enp1s0 \
+DAYSHIELD_LAN_IFACE=enp2s0 \
+/usr/lib/dayshield-installer/install.sh
 ```
 
 ### First boot (after install)
@@ -604,6 +615,8 @@ curl -Lo ../dayshield-installer-ui/installer-ui/alpine.min.js \
   "https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"
 ```
 
+Always verify checksum/signature provenance before replacing bundled runtime files.
+
 ### Compiled Tailwind CSS (optional)
 
 The `styles.css` in the installer UI repo contains Tailwind source directives.
@@ -629,4 +642,3 @@ npx tailwindcss -i styles.css -o dist/styles.css \
 | No IPv6 | `ipv6.disable=1` kernel parameter + dracut `omit_dracutmodules+=" ipv6 "` |
 | GPT partitioning | Required for UEFI; also supported by modern BIOS-boot GRUB |
 | ext4 root filesystem | Best compatibility with the Debian-based rootfs |
-
