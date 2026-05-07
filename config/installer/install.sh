@@ -121,18 +121,22 @@ valid_iface_name() {
 valid_ipv4_cidr() {
     local cidr="$1"
     local ip prefix octet
+    local -a octets
 
-    [[ "${cidr}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]] || return 1
+    [[ "${cidr}" == */* ]] || return 1
 
     ip="${cidr%/*}"
     prefix="${cidr#*/}"
-    (( prefix >= 0 && prefix <= 32 )) || return 1
+    [[ "${ip}" != "${cidr}" ]] || return 1
+    [[ "${prefix}" =~ ^[0-9]{1,2}$ ]] || return 1
 
     IFS='.' read -r -a octets <<< "${ip}"
     [[ ${#octets[@]} -eq 4 ]] || return 1
     for octet in "${octets[@]}"; do
-        (( octet >= 0 && octet <= 255 )) || return 1
+        [[ "${octet}" =~ ^[0-9]{1,3}$ ]] || return 1
+        [[ "${octet}" -ge 0 && "${octet}" -le 255 ]] || return 1
     done
+    [[ "${prefix}" -ge 0 && "${prefix}" -le 32 ]] || return 1
 }
 
 collect_install_configuration() {
