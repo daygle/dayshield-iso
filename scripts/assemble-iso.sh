@@ -178,14 +178,10 @@ xorriso -as mkisofs \
     -output "${OUTPUT}" \
     "${ISO_ROOT}"
 
-MD5_FILE="${OUTPUT}.md5"
 SHA256_FILE="${OUTPUT}.sha256"
 
-md5sum "${OUTPUT}" > "${MD5_FILE}"
 sha256sum "${OUTPUT}" > "${SHA256_FILE}"
 
 echo "--> ISO assembled: ${OUTPUT}"
-echo "    MD5 : $(md5sum "${OUTPUT}" | cut -d' ' -f1)"
 echo "    SHA256 : $(sha256sum "${OUTPUT}" | cut -d' ' -f1)"
-echo "    MD5 file: ${MD5_FILE}"
 echo "    SHA256 file: ${SHA256_FILE}"

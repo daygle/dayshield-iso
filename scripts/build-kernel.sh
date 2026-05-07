@@ -12,6 +12,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${BUILD_DIR:="${SCRIPT_DIR}/../build"}"
 : "${ARCH:="amd64"}"
+: "${ALLOW_APT_NETWORK:="0"}"
 
 ROOTFS_DIR="${BUILD_DIR}/rootfs"
 KERNEL_DIR="${BUILD_DIR}/kernel"
@@ -34,6 +35,13 @@ fi
 # Fallback: install kernel inside chroot if not present
 # ---------------------------------------------------------------------------
 if [[ -z "${VMLINUZ}" ]]; then
+    if [[ "${ALLOW_APT_NETWORK}" != "1" ]]; then
+        echo "ERROR: No kernel found in ${ROOTFS_DIR}/boot." >&2
+        echo "       Network package installation is disabled by default for reproducibility." >&2
+        echo "       Ensure the rootfs includes a kernel, or rerun with ALLOW_APT_NETWORK=1." >&2
+        exit 1
+    fi
+
     echo "--> No kernel found in rootfs; installing linux-image via chroot …"
 
     # Ensure /tmp exists inside the rootfs for apt/dpkg temporary files.
