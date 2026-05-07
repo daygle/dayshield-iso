@@ -129,7 +129,7 @@ echo "--> Copying x86_64-efi GRUB modules …"
 mkdir -p "${GRUB_BIOS_DIR}/x86_64-efi"
 cp "${GRUB_X64_LIB}"/*.mod "${GRUB_BIOS_DIR}/x86_64-efi/" 2>/dev/null || true
 [[ -f "${GRUB_X64_LIB}/moddep.lst" ]] && cp "${GRUB_X64_LIB}/moddep.lst" "${GRUB_BIOS_DIR}/x86_64-efi/"
-echo "    Modules: $(ls "${GRUB_BIOS_DIR}/x86_64-efi/" | wc -l) files"
+echo "    Modules: $(find "${GRUB_BIOS_DIR}/x86_64-efi/" -mindepth 1 -maxdepth 1 | wc -l) files"
 
 # Build the FAT EFI System Partition image (efiboot.img)
 EFI_IMG="${BOOT_DIR}/EFI/efiboot.img"

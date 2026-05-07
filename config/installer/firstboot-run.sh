@@ -37,7 +37,7 @@ ssh-keygen -A
 # ---------------------------------------------------------------------------
 echo "--> Generating machine-id …"
 systemd-machine-id-setup --force 2>/dev/null || \
-    cat /proc/sys/kernel/random/uuid | tr -d '-' > /etc/machine-id
+    tr -d '-' < /proc/sys/kernel/random/uuid > /etc/machine-id
 
 # ---------------------------------------------------------------------------
 # 3. ACME / TLS keys (if dayshield-acme is installed)

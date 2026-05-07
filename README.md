@@ -4,7 +4,7 @@ Deterministic, reproducible hybrid BIOS+UEFI bootable installer ISO for the
 **DayShield Firewall OS**.
 
 Takes the output of [dayshield-rootfs](https://github.com/daygle/dayshield-rootfs)
-(`rootfs.tar.zst`) and produces a signed, bit-for-bit reproducible `.iso` file.
+(`rootfs.tar.zst`) and produces a checksummed, reproducible `.iso` file.
 
 ---
 
@@ -37,7 +37,9 @@ apt-get install -y \
 **Rust** (for building `dayshield-core`) - install via rustup, not apt:
 
 ```sh
-curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain 1.88.0
+curl -fsSLo /tmp/rustup-init https://sh.rustup.rs
+# Verify /tmp/rustup-init against the official rustup checksum before executing.
+bash /tmp/rustup-init -y --profile minimal --default-toolchain 1.88.0
 source "$HOME/.cargo/env"
 ```
 
@@ -74,7 +76,9 @@ apt-get update
 apt-get install -y git curl gcc make build-essential mmdebstrap zstd systemd-container xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin dosfstools dracut dracut-live util-linux parted rsync qemu-system-x86 ovmf nodejs npm
 
 # Install Rust via rustup (do NOT install rustc/cargo/rustup from apt)
-curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain 1.88.0
+curl -fsSLo /tmp/rustup-init https://sh.rustup.rs
+# Verify /tmp/rustup-init against the official rustup checksum before executing.
+bash /tmp/rustup-init -y --profile minimal --default-toolchain 1.88.0
 source "$HOME/.cargo/env"
 
 # Install Node if you need to build the management UI
@@ -183,17 +187,19 @@ cd ~/dayshield-iso
 
 make iso \
     ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
+    ROOTFS_SHA256=<sha256-of-rootfs.tar.zst> \
     INSTALLER_UI=../dayshield-installer-ui/installer-ui
 ```
 
-This build now also writes checksum files next to the ISO:
+This build writes a SHA256 checksum file next to the ISO:
 
 ```sh
 dayshield.iso.sha256
-dayshield.iso.md5
 ```
 
 The `INSTALLER_UI` path is for the live installer UI on the ISO.
+`ROOTFS_SHA256` is required unless a `<rootfs-path>.sha256` file exists next to
+the rootfs archive.
 If you also want the installed system to serve the management UI, build
 `dayshield-ui` separately and include it in the rootfs build via
 `UI_DIR=../dayshield-ui/dist`.
@@ -396,7 +402,6 @@ dayshield-iso/
 |   `-- verify.sh                 # Content and boot verification
 |-- config/
 |   |-- grub.cfg                  # GRUB boot menu
-|   |-- isolinux.cfg              # ISOLINUX/SYSLINUX fallback menu
 |   `-- installer/
 |       |-- install.sh              # CLI installer orchestrator (fallback)
 |       |-- partition.sh            # GPT disk partitioning
@@ -418,11 +423,13 @@ dayshield-iso/
 # From the dayshield-iso repository root
 make iso \
     ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
+    ROOTFS_SHA256=<sha256-of-rootfs.tar.zst> \
     INSTALLER_UI=../dayshield-installer-ui/installer-ui
 
 # Custom output path
 make iso \
     ROOTFS=/path/to/rootfs.tar.zst \
+    ROOTFS_SHA256=<sha256-of-rootfs.tar.zst> \
     INSTALLER_UI=../dayshield-installer-ui/installer-ui \
     OUTPUT=/output/dayshield.iso
 ```
@@ -441,6 +448,7 @@ pipeline starts: `index.html`, `styles.css`, `app.js`, `alpine.min.js`,
 ```sh
 bash scripts/build-iso.sh \
     --rootfs       ../dayshield-rootfs/rootfs.tar.zst \
+    --rootfs-sha256 <sha256-of-rootfs.tar.zst> \
     --installer-ui ../dayshield-installer-ui/installer-ui \
     --output       dayshield.iso \
     --arch         amd64
@@ -467,7 +475,9 @@ The build pipeline enforces deterministic output:
 - All file timestamps are normalised to **epoch 0** (`1970-01-01T00:00:00Z`).
 - `mksquashfs` is called with `-mkfs-time 0`, `-no-fragments`, `-all-root`.
 - `xorriso` is called with `-set_all_file_dates 0`.
-- No network calls are made during the build.
+- No network calls are made during the build when the rootfs already contains
+  required live packages and kernel assets. Set `ALLOW_NETWORK_FETCH=1` only
+  when you explicitly want chrooted package installation fallback.
 - IPv6 is disabled (`ipv6.disable=1`) in all kernel command lines.
 
 ---
@@ -595,6 +605,7 @@ If you want to refresh them manually, run:
 ```sh
 curl -Lo ../dayshield-installer-ui/installer-ui/alpine.min.js \
   "https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"
+# Verify the downloaded file checksum before committing it into installer-ui.
 ```
 
 ### Compiled Tailwind CSS (optional)
@@ -622,4 +633,3 @@ npx tailwindcss -i styles.css -o dist/styles.css \
 | No IPv6 | `ipv6.disable=1` kernel parameter + dracut `omit_dracutmodules+=" ipv6 "` |
 | GPT partitioning | Required for UEFI; also supported by modern BIOS-boot GRUB |
 | ext4 root filesystem | Best compatibility with the Debian-based rootfs |
-

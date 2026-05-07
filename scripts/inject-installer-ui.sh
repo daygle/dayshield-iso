@@ -44,11 +44,36 @@ echo "--> Injecting installer web UI into live rootfs …"
 echo "    source : ${INSTALLER_UI_DIR}"
 echo "    dest   : ${ROOTFS_DIR}/installer-ui/"
 
+prune_installer_ui_tree() {
+    local ui_root="$1"
+    rm -rf \
+        "${ui_root}/.git" \
+        "${ui_root}/.github" \
+        "${ui_root}/node_modules"
+    find "${ui_root}" -type f \( \
+        -name '.env' -o \
+        -name '.env.*' -o \
+        -name '*.map' -o \
+        -name '*.test.*' -o \
+        -name '*.spec.*' -o \
+        -name 'package.json' -o \
+        -name 'package-lock.json' -o \
+        -name 'pnpm-lock.yaml' -o \
+        -name 'yarn.lock' -o \
+        -name 'tsconfig*.json' -o \
+        -name 'vite.config.*' -o \
+        -name 'tailwind.config.*' -o \
+        -name 'README*' -o \
+        -name 'LICENSE*' \
+    \) -delete 2>/dev/null || true
+}
+
 # ---------------------------------------------------------------------------
 # Copy web UI files
 # ---------------------------------------------------------------------------
 mkdir -p "${ROOTFS_DIR}/installer-ui"
 cp -a "${INSTALLER_UI_DIR}/." "${ROOTFS_DIR}/installer-ui/"
+prune_installer_ui_tree "${ROOTFS_DIR}/installer-ui"
 
 # Ensure all API scripts are executable (busybox httpd runs them as CGI)
 find "${ROOTFS_DIR}/installer-ui/api" -name "*.sh" -exec chmod 755 {} + 2>/dev/null || true
