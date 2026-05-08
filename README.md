@@ -372,10 +372,13 @@ apt-get install \
     dosfstools dracut zstd parted rsync util-linux
 ```
 
-> **Note:** `live-boot`, `live-config`, and `squashfs-tools` are included
-> inside the rootfs itself (via `dayshield-rootfs/config/packages.txt`) so
-> the live initrd can mount the squashfs root.  They do not need to be
-> installed on the build host.
+> **Note:** `squashfs-tools` is a build-host dependency, but `live-boot`
+> and `live-config` are intentionally excluded from the installed-system
+> rootfs produced by `dayshield-rootfs`.
+> If the input rootfs does not already contain `live-boot`/`live-config`, the
+> ISO builder will install them into the live rootfs during `ensure-live-boot.sh`.
+> That fallback requires network access, so set `ALLOW_NETWORK_FETCH=1` if
+> you are building with a rootfs that was produced for installed-system use.
 
 ---
 
