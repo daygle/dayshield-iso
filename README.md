@@ -101,9 +101,6 @@ git clone https://github.com/daygle/dayshield-ui
 git clone https://github.com/daygle/dayshield-core
 ```
 
-If you want the installed system to serve the management UI, build `dayshield-ui`
-and provide its `dist` output to the rootfs builder.
-
 ---
 
 ### Phase 3 - Build the dayshield-core binary
@@ -134,14 +131,8 @@ cp target/release/dayshield-core ~/dayshield-rootfs/dayshield-core
 
 ### Phase 4 - Build the root filesystem
 
-```sh
-cd ~/dayshield-rootfs
-make rootfs
-```
-
-If you want the installed system to serve the Management UI, first build the
-UI in the `dayshield-ui` repository and pass its output directory into the
-rootfs builder:
+The management UI is a required component. Always build it before building
+the rootfs:
 
 ```sh
 cd ~/dayshield-ui
