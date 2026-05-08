@@ -179,7 +179,6 @@ All checks should exit `[PASS]`.  The script validates:
 ```sh
 cd ~/dayshield-iso
 
-```sh
 ALLOW_NETWORK_FETCH=1 make iso \
   ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
   ROOTFS_SHA256="$ROOTFS_SHA256" \
