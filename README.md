@@ -185,6 +185,17 @@ make iso \
     INSTALLER_UI=../dayshield-installer-ui/installer-ui
 ```
 
+If the input rootfs was built for installed-system use and does not already
+contain `live-boot`/`live-config`, allow the ISO builder to fetch them during
+this step:
+
+```sh
+ALLOW_NETWORK_FETCH=1 make iso \
+    ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
+    ROOTFS_SHA256=<sha256-of-rootfs.tar.zst> \
+    INSTALLER_UI=../dayshield-installer-ui/installer-ui
+```
+
 This build writes a SHA256 checksum file next to the ISO:
 
 ```sh
@@ -420,6 +431,13 @@ dayshield-iso/
 ```sh
 # From the dayshield-iso repository root
 make iso \
+    ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
+    ROOTFS_SHA256=<sha256-of-rootfs.tar.zst> \
+    INSTALLER_UI=../dayshield-installer-ui/installer-ui
+
+# If the input rootfs does not already contain live-boot/live-config,
+# allow the ISO builder to fetch them during the build.
+ALLOW_NETWORK_FETCH=1 make iso \
     ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
     ROOTFS_SHA256=<sha256-of-rootfs.tar.zst> \
     INSTALLER_UI=../dayshield-installer-ui/installer-ui
