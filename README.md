@@ -491,7 +491,8 @@ The build pipeline enforces deterministic output:
 
 - All file timestamps are normalised to **epoch 0** (`1970-01-01T00:00:00Z`).
 - `mksquashfs` is called with `-mkfs-time 0`, `-no-fragments`, `-all-root`.
-- `xorriso` is called with `-set_all_file_dates 0`.
+- `xorriso` attempts to use `-set_all_file_dates 0` when supported. If the installed
+  xorriso version does not support that option, the ISO is still assembled without it.
 - IPv6 is disabled (`ipv6.disable=1`) in all kernel command lines.
 
 > **Note on network access during build:** The pipeline is offline by default when

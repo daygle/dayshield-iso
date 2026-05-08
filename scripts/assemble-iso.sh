@@ -164,8 +164,16 @@ fi
 # ---------------------------------------------------------------------------
 # Assemble the ISO with xorriso
 # ---------------------------------------------------------------------------
+
 echo "--> Running xorriso …"
 echo "    output: ${OUTPUT}"
+
+XORRISO_DATE_ARGS=()
+if xorriso -as mkisofs -help 2>/dev/null | grep -q -- '-set_all_file_dates'; then
+    XORRISO_DATE_ARGS+=( -set_all_file_dates 0 )
+else
+    echo "WARNING: xorriso does not support -set_all_file_dates; ISO file dates will not be normalized by xorriso."
+fi
 
 xorriso -as mkisofs \
     -iso-level 3 \
@@ -176,7 +184,7 @@ xorriso -as mkisofs \
     -volid "DAYSHIELD" \
     -publisher "DayShield Project" \
     -appid "DayShield Firewall OS Installer" \
-    -set_all_file_dates 0 \
+    ${XORRISO_DATE_ARGS[@]+"${XORRISO_DATE_ARGS[@]}"} \
     ${BIOS_ELTORITO_ARGS[@]+"${BIOS_ELTORITO_ARGS[@]}"} \
     ${XORRISO_EXTRA_ARGS[@]+"${XORRISO_EXTRA_ARGS[@]}"} \
     -output "${OUTPUT}" \
