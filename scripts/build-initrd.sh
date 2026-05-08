@@ -28,8 +28,7 @@ INSTALLER_SRC="${CONFIG_DIR}/installer"
 # Prefer the modules directory name - it is the exact string the kernel and
 # dracut need, and avoids regex mis-truncation (e.g. 6.1.0-42-rt-amd64 vs
 # 6.1.0-42-rt).
-KVER="$(find "${ROOTFS_DIR}/lib/modules" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null \
-    | sort -V | tail -n1 || true)"
+KVER="$(find "${ROOTFS_DIR}/lib/modules" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort -V | tail -n1 || true)"
 
 if [[ -z "${KVER}" ]]; then
     # Fallback: extract from the kernel binary
@@ -39,6 +38,14 @@ if [[ -z "${KVER}" ]]; then
 fi
 
 KERNEL_VERSION="${KVER}"
+if [[ -n "${KERNEL_VERSION}" ]] && [[ ! "${KERNEL_VERSION}" =~ ^[A-Za-z0-9._+-]+$ ]]; then
+    echo "ERROR: Invalid kernel version string: ${KERNEL_VERSION}" >&2
+    exit 1
+fi
+if [[ "${KERNEL_VERSION}" == *".."* ]]; then
+    echo "ERROR: Invalid kernel version string contains '..': ${KERNEL_VERSION}" >&2
+    exit 1
+fi
 
 echo "--> Building initrd (kernel: ${KERNEL_VERSION:-unknown}) …"
 

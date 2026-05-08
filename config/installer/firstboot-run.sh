@@ -40,12 +40,8 @@ fi
 # 2. Unique machine-id
 # ---------------------------------------------------------------------------
 echo "--> Generating machine-id …"
-if ! systemd-machine-id-setup --force 2>/dev/null; then
-    if ! tr -d '-' < /proc/sys/kernel/random/uuid > /etc/machine-id; then
-        echo "[ERROR] Failed to generate machine-id."
-        FAILED=1
-    fi
-fi
+systemd-machine-id-setup --force 2>/dev/null || \
+    tr -d '-' < /proc/sys/kernel/random/uuid > /etc/machine-id
 
 # ---------------------------------------------------------------------------
 # 3. ACME / TLS keys (if dayshield-acme is installed)
@@ -67,25 +63,21 @@ find /var/lib/dhcp/ -name '*.leases' -delete 2>/dev/null || true
 find /var/lib/dhclient/ -name '*.leases' -delete 2>/dev/null || true
 
 # Reload network units
-if ! systemctl daemon-reload 2>/dev/null; then
-    echo "[WARN] Failed to reload systemd units."
-fi
-if ! systemctl restart systemd-networkd 2>/dev/null; then
-    echo "[WARN] Failed to restart systemd-networkd."
-fi
+systemctl daemon-reload || echo "WARNING: daemon-reload failed" >&2
+systemctl restart systemd-networkd || echo "WARNING: systemd-networkd restart failed" >&2
 
 # ---------------------------------------------------------------------------
 # 5. Start dayshield-core
 # ---------------------------------------------------------------------------
 echo "--> Starting dayshield-core …"
-if ! systemctl enable dayshield.service 2>/dev/null; then
-    echo "[ERROR] Failed to enable dayshield.service."
-    FAILED=1
-fi
-if ! systemctl start dayshield.service 2>/dev/null; then
-    echo "[ERROR] Failed to start dayshield.service."
-    FAILED=1
-fi
+systemctl enable dayshield.service || {
+    echo "[ERROR] Failed to enable dayshield.service" >&2
+    exit 1
+}
+systemctl start dayshield.service || {
+    echo "[ERROR] Failed to start dayshield.service" >&2
+    exit 1
+}
 
 # ---------------------------------------------------------------------------
 # 6. Remove firstboot marker

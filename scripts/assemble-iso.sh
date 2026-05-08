@@ -14,6 +14,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${BUILD_DIR:="${SCRIPT_DIR}/../build"}"
 : "${CONFIG_DIR:="${SCRIPT_DIR}/../config"}"
+# shellcheck source=scripts/installer-ui-common.sh
+source "${SCRIPT_DIR}/installer-ui-common.sh"
 
 OUTPUT=""
 ROOTFS_ARCHIVE=""
@@ -113,6 +115,7 @@ if [[ -n "${INSTALLER_UI_DIR}" ]] && [[ -d "${INSTALLER_UI_DIR}" ]]; then
     echo "--> Embedding installer web UI at /installer-ui/ …"
     mkdir -p "${ISO_ROOT}/installer-ui"
     cp -r "${INSTALLER_UI_DIR}/." "${ISO_ROOT}/installer-ui/"
+    prune_installer_ui_tree "${ISO_ROOT}/installer-ui"
 fi
 
 # Normalise all timestamps to epoch 0
@@ -161,8 +164,16 @@ fi
 # ---------------------------------------------------------------------------
 # Assemble the ISO with xorriso
 # ---------------------------------------------------------------------------
+
 echo "--> Running xorriso …"
 echo "    output: ${OUTPUT}"
+
+XORRISO_DATE_ARGS=()
+if xorriso -as mkisofs -help 2>/dev/null | grep -q -- '-set_all_file_dates'; then
+    XORRISO_DATE_ARGS+=( -set_all_file_dates 0 )
+else
+    echo "WARNING: xorriso does not support -set_all_file_dates; ISO file dates will not be normalized by xorriso."
+fi
 
 xorriso -as mkisofs \
     -iso-level 3 \
@@ -174,19 +185,16 @@ xorriso -as mkisofs \
     -volid "DAYSHIELD" \
     -publisher "DayShield Project" \
     -appid "DayShield Firewall OS Installer" \
+    ${XORRISO_DATE_ARGS[@]+"${XORRISO_DATE_ARGS[@]}"} \
     ${BIOS_ELTORITO_ARGS[@]+"${BIOS_ELTORITO_ARGS[@]}"} \
     ${XORRISO_EXTRA_ARGS[@]+"${XORRISO_EXTRA_ARGS[@]}"} \
     -output "${OUTPUT}" \
     "${ISO_ROOT}"
 
-MD5_FILE="${OUTPUT}.md5"
 SHA256_FILE="${OUTPUT}.sha256"
 
-md5sum "${OUTPUT}" > "${MD5_FILE}"
 sha256sum "${OUTPUT}" > "${SHA256_FILE}"
 
 echo "--> ISO assembled: ${OUTPUT}"
-echo "    MD5 : $(md5sum "${OUTPUT}" | cut -d' ' -f1)"
 echo "    SHA256 : $(sha256sum "${OUTPUT}" | cut -d' ' -f1)"
-echo "    MD5 file: ${MD5_FILE}"
 echo "    SHA256 file: ${SHA256_FILE}"

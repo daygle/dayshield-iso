@@ -4,7 +4,8 @@ Deterministic, reproducible hybrid BIOS+UEFI bootable installer ISO for the
 **DayShield Firewall OS**.
 
 Takes the output of [dayshield-rootfs](https://github.com/daygle/dayshield-rootfs)
-(`rootfs.tar.zst`) and produces a signed, bit-for-bit reproducible `.iso` file.
+(`rootfs.tar.zst`) and produces a deterministic hybrid BIOS+UEFI installer `.iso`
+plus a SHA-256 checksum file.
 
 ---
 
@@ -37,9 +38,13 @@ apt-get install -y \
 **Rust** (for building `dayshield-core`) - install via rustup, not apt:
 
 ```sh
-curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain 1.88.0
+curl -fsSLo /tmp/rustup-init https://sh.rustup.rs
+# Verify /tmp/rustup-init against the official rustup checksum before executing.
+bash /tmp/rustup-init -y --profile minimal --default-toolchain 1.88.0
 source "$HOME/.cargo/env"
 ```
+
+> Verify external downloads before executing them in production build environments.
 
 **Node.js / npm** (for building `dayshield-ui` if you want the installed-system UI) - install via the distro package or NodeSource for Node 18+.
 
@@ -74,7 +79,9 @@ apt-get update
 apt-get install -y git curl gcc make build-essential mmdebstrap zstd systemd-container xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin dosfstools dracut dracut-live util-linux parted rsync qemu-system-x86 ovmf nodejs npm
 
 # Install Rust via rustup (do NOT install rustc/cargo/rustup from apt)
-curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain 1.88.0
+curl -fsSLo /tmp/rustup-init https://sh.rustup.rs
+# Verify /tmp/rustup-init against the official rustup checksum before executing.
+bash /tmp/rustup-init -y --profile minimal --default-toolchain 1.88.0
 source "$HOME/.cargo/env"
 
 # Install Node if you need to build the management UI
@@ -93,9 +100,6 @@ git clone https://github.com/daygle/dayshield-installer-ui
 git clone https://github.com/daygle/dayshield-ui
 git clone https://github.com/daygle/dayshield-core
 ```
-
-If you want the installed system to serve the management UI, build `dayshield-ui`
-and provide its `dist` output to the rootfs builder.
 
 ---
 
@@ -127,14 +131,8 @@ cp target/release/dayshield-core ~/dayshield-rootfs/dayshield-core
 
 ### Phase 4 - Build the root filesystem
 
-```sh
-cd ~/dayshield-rootfs
-make rootfs
-```
-
-If you want the installed system to serve the Management UI, first build the
-UI in the `dayshield-ui` repository and pass its output directory into the
-rootfs builder:
+The management UI is a required component. Always build it before building
+the rootfs:
 
 ```sh
 cd ~/dayshield-ui
@@ -181,19 +179,36 @@ All checks should exit `[PASS]`.  The script validates:
 ```sh
 cd ~/dayshield-iso
 
-make iso \
-    ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
-    INSTALLER_UI=../dayshield-installer-ui/installer-ui
+# Generate and persist the rootfs checksum (required by the ISO builder)
+sha256sum ../dayshield-rootfs/rootfs.tar.zst | awk '{print $1}' > ../dayshield-rootfs/rootfs.tar.zst.sha256
+ROOTFS_SHA256="$(cat ../dayshield-rootfs/rootfs.tar.zst.sha256)"
+
+ALLOW_NETWORK_FETCH=1 make iso \
+  ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
+  ROOTFS_SHA256="$ROOTFS_SHA256" \
+  INSTALLER_UI=../dayshield-installer-ui/installer-ui
 ```
 
-This build now also writes checksum files next to the ISO:
+If you prefer not to export a shell variable, you can rely on the sibling
+`../dayshield-rootfs/rootfs.tar.zst.sha256` file created above:
+
+```sh
+cd ~/dayshield-iso
+
+ALLOW_NETWORK_FETCH=1 make iso \
+  ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
+  INSTALLER_UI=../dayshield-installer-ui/installer-ui
+```
+
+This build writes a SHA256 checksum file next to the ISO:
 
 ```sh
 dayshield.iso.sha256
-dayshield.iso.md5
 ```
 
 The `INSTALLER_UI` path is for the live installer UI on the ISO.
+`ROOTFS_SHA256` is required unless a `<rootfs-path>.sha256` file exists next to
+the rootfs archive.
 If you also want the installed system to serve the management UI, build
 `dayshield-ui` separately and include it in the rootfs build via
 `UI_DIR=../dayshield-ui/dist`.
@@ -296,10 +311,11 @@ qemu-system-x86_64 \
 Expected boot sequence: GRUB menu -> kernel messages -> systemd -> installer
 launched on tty1.
 
-> **Live session login** - username `root`, password `dayshield`.  This default password
-> is set only for the live/installer environment and is not carried
-> forward to the installed system.  The installer's configure step sets the
-> real root password before first boot.
+> **Live session login** - The live/installer environment default root password is
+> set in the `dayshield-rootfs` build; it is **not** carried forward to the
+> installed system.  The CLI installer (`install.sh`) prompts for the root
+> password during installation.  Change the live root password before exposing
+> the system to a network.
 
 > **No boot splash** - Plymouth is not installed.  Plain kernel log is
 > intentional.  If you see a panic, check that the ISO label is `DAYSHIELD`
@@ -320,7 +336,7 @@ Installation steps:
 3. **Format** - FAT32 EFI, ext4 root
 4. **Install rootfs** - extracts the rootfs archive from the ISO to the target
 5. **Install bootloader** - GRUB BIOS + UEFI on the target disk
-6. **Configure** - hostname, root password, primary network interface
+6. **Configure** - hostname, root password, WAN/LAN interfaces
 7. **Finalize** - unmounts, syncs
 8. **Reboot**
 
@@ -371,10 +387,13 @@ apt-get install \
     dosfstools dracut zstd parted rsync util-linux
 ```
 
-> **Note:** `live-boot`, `live-config`, and `squashfs-tools` are included
-> inside the rootfs itself (via `dayshield-rootfs/config/packages.txt`) so
-> the live initrd can mount the squashfs root.  They do not need to be
-> installed on the build host.
+> **Note:** `squashfs-tools` is a build-host dependency, but `live-boot`
+> and `live-config` are intentionally excluded from the installed-system
+> rootfs produced by `dayshield-rootfs`.
+> If the input rootfs does not already contain `live-boot`/`live-config`, the
+> ISO builder will install them into the live rootfs during `ensure-live-boot.sh`.
+> That fallback requires network access, so set `ALLOW_NETWORK_FETCH=1` if
+> you are building with a rootfs that was produced for installed-system use.
 
 ---
 
@@ -417,11 +436,20 @@ dayshield-iso/
 # From the dayshield-iso repository root
 make iso \
     ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
+    ROOTFS_SHA256=<sha256-of-rootfs.tar.zst> \
+    INSTALLER_UI=../dayshield-installer-ui/installer-ui
+
+# If the input rootfs does not already contain live-boot/live-config,
+# allow the ISO builder to fetch them during the build.
+ALLOW_NETWORK_FETCH=1 make iso \
+    ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
+    ROOTFS_SHA256=<sha256-of-rootfs.tar.zst> \
     INSTALLER_UI=../dayshield-installer-ui/installer-ui
 
 # Custom output path
 make iso \
     ROOTFS=/path/to/rootfs.tar.zst \
+    ROOTFS_SHA256=<sha256-of-rootfs.tar.zst> \
     INSTALLER_UI=../dayshield-installer-ui/installer-ui \
     OUTPUT=/output/dayshield.iso
 ```
@@ -440,6 +468,7 @@ pipeline starts: `index.html`, `styles.css`, `app.js`, `alpine.min.js`,
 ```sh
 bash scripts/build-iso.sh \
     --rootfs       ../dayshield-rootfs/rootfs.tar.zst \
+    --rootfs-sha256 <sha256-of-rootfs.tar.zst> \
     --installer-ui ../dayshield-installer-ui/installer-ui \
     --output       dayshield.iso \
     --arch         amd64
@@ -449,15 +478,16 @@ bash scripts/build-iso.sh \
 
 | Step | Script | Output |
 |------|--------|--------|
-| 1. Extract rootfs       | `extract-rootfs.sh`       | `build/rootfs/` |
-| 2. Inject installer UI  | `inject-installer-ui.sh`  | `build/rootfs/installer-ui/`, service units enabled |
-| 3. Ensure live-boot     | `ensure-live-boot.sh`     | `live-boot`/`live-config` installed into `build/rootfs/` if absent |
-| 4. Build squashfs       | `build-squashfs.sh`       | `build/squashfs-rootfs.sqsh` |
-| 5. Locate kernel        | `build-kernel.sh`         | `build/kernel/vmlinuz`, `build/kernel/initrd.img` |
-| 6. Build initrd         | `build-initrd.sh`         | `build/kernel/initrd.img` (replaced) |
-| 7. Build bootloader     | `build-bootloader.sh`     | `build/bootloader/` |
-| 8. Assemble ISO         | `assemble-iso.sh`         | `dayshield.iso` |
-| 9. Cleanup              | `cleanup.sh`              | removes `build/` |
+| 1. Extract rootfs             | `extract-rootfs.sh`           | `build/rootfs/` |
+| 2. Inject installer UI        | `inject-installer-ui.sh`      | `build/rootfs/installer-ui/`, service units enabled |
+| 3. Embed installer scripts    | `embed-installer-scripts.sh`  | `build/rootfs/usr/lib/dayshield-installer/` |
+| 4. Ensure live-boot           | `ensure-live-boot.sh`         | `live-boot`/`live-config` installed into `build/rootfs/` if absent |
+| 5. Build squashfs             | `build-squashfs.sh`           | `build/squashfs-rootfs.sqsh` |
+| 6. Locate kernel              | `build-kernel.sh`             | `build/kernel/vmlinuz`, `build/kernel/initrd.img` |
+| 7. Build initrd               | `build-initrd.sh`             | `build/kernel/initrd.img` (replaced) |
+| 8. Build bootloader           | `build-bootloader.sh`         | `build/bootloader/` |
+| 9. Assemble ISO               | `assemble-iso.sh`             | `dayshield.iso` |
+| 10. Cleanup                   | `cleanup.sh`                  | removes `build/` |
 
 ### Reproducibility
 
@@ -465,17 +495,16 @@ The build pipeline enforces deterministic output:
 
 - All file timestamps are normalised to **epoch 0** (`1970-01-01T00:00:00Z`).
 - `mksquashfs` is called with `-mkfs-time 0`, `-no-fragments`, `-all-root`.
-- Input trees are normalised to epoch timestamps before `xorriso` assembly.
-- `xorriso` is called with `-set_all_file_dates 0`.
-- By default, no network package fetches are performed during build steps.
+- `xorriso` attempts to use `-set_all_file_dates 0` when supported. If the installed
+  xorriso version does not support that option, the ISO is still assembled without it.
 - IPv6 is disabled (`ipv6.disable=1`) in all kernel command lines.
 
-If your rootfs is missing a kernel or live-boot packages, you can explicitly
-opt into network fallbacks by setting:
-
-```sh
-ALLOW_NETWORK_FETCH=1 make iso ROOTFS=... INSTALLER_UI=...
-```
+> **Note on network access during build:** The pipeline is offline by default when
+> the input rootfs already contains `live-boot`/`live-config` and a kernel.  Two
+> scripts perform an `apt-get` install as an automatic fallback only when those
+> components are absent from the rootfs (`ensure-live-boot.sh`) or when no kernel
+> image is present (`build-kernel.sh`).  Pre-building a complete rootfs with
+> `dayshield-rootfs` avoids both fallback paths.
 
 ---
 
@@ -549,7 +578,7 @@ machine at `http://<live-ip>:8443/`.
 4. **Format** - FAT32 EFI + ext4 root
 5. **Install rootfs** - extracts `rootfs.tar.zst` from the ISO to the target
 6. **Install bootloader** - installs GRUB (BIOS + UEFI) on the target disk
-7. **Configure** - hostname, root password, primary network interface
+7. **Configure** - hostname, root password, WAN/LAN interfaces
 8. **Finalize** - unmounts, syncs, removes installer artefacts
 9. **Reboot**
 
@@ -564,7 +593,20 @@ If the web UI cannot be used, shell installer scripts are available under
 
 # Specify target disk explicitly
 DAYSHIELD_TARGET_DISK=/dev/sda /usr/lib/dayshield-installer/install.sh
+
+# Unattended install (requires explicit root password and interfaces)
+DAYSHIELD_UNATTENDED=1 \
+DAYSHIELD_TARGET_DISK=/dev/sda \
+DAYSHIELD_HOSTNAME=dayshield \
+DAYSHIELD_ROOT_PASSWORD='change-me' \
+DAYSHIELD_WAN_IFACE=enp1s0 \
+DAYSHIELD_LAN_IFACE=enp2s0 \
+/usr/lib/dayshield-installer/install.sh
 ```
+
+The installer sets the installed system's hostname and root password, and
+installs an SSH configuration drop-in that explicitly allows root login with
+password authentication.
 
 ### First boot (after install)
 
@@ -601,7 +643,10 @@ If you want to refresh them manually, run:
 ```sh
 curl -Lo ../dayshield-installer-ui/installer-ui/alpine.min.js \
   "https://cdn.jsdelivr.net/npm/alpinejs@3/dist/cdn.min.js"
+# Verify the downloaded file checksum before committing it into installer-ui.
 ```
+
+Always verify checksum/signature provenance before replacing bundled runtime files.
 
 ### Compiled Tailwind CSS (optional)
 

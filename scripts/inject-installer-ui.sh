@@ -14,6 +14,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${BUILD_DIR:="${SCRIPT_DIR}/../build"}"
+# shellcheck source=scripts/installer-ui-common.sh
+source "${SCRIPT_DIR}/installer-ui-common.sh"
 
 ROOTFS_DIR="${BUILD_DIR}/rootfs"
 INSTALLER_UI_DIR=""
@@ -49,6 +51,7 @@ echo "    dest   : ${ROOTFS_DIR}/installer-ui/"
 # ---------------------------------------------------------------------------
 mkdir -p "${ROOTFS_DIR}/installer-ui"
 cp -a "${INSTALLER_UI_DIR}/." "${ROOTFS_DIR}/installer-ui/"
+prune_installer_ui_tree "${ROOTFS_DIR}/installer-ui"
 
 # Ensure all API scripts are executable (busybox httpd runs them as CGI)
 find "${ROOTFS_DIR}/installer-ui/api" -name "*.sh" -exec chmod 755 {} + 2>/dev/null || true

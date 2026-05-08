@@ -61,8 +61,8 @@ if _pkg_installed live-boot-initramfs-tools && _pkg_installed live-config; then
 fi
 
 if [[ "${ALLOW_NETWORK_FETCH}" != "1" ]]; then
-    echo "ERROR: live-boot/live-config are missing and network fallback is disabled." >&2
-    echo "       Rebuild rootfs with these packages included, or set ALLOW_NETWORK_FETCH=1." >&2
+    echo "ERROR: live-boot packages are missing in rootfs and network fetch is disabled." >&2
+    echo "       Rebuild rootfs with required packages or set ALLOW_NETWORK_FETCH=1 explicitly." >&2
     exit 1
 fi
 
