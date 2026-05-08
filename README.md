@@ -179,21 +179,11 @@ All checks should exit `[PASS]`.  The script validates:
 ```sh
 cd ~/dayshield-iso
 
-make iso \
-    ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
-    ROOTFS_SHA256=<sha256-of-rootfs.tar.zst> \
-    INSTALLER_UI=../dayshield-installer-ui/installer-ui
-```
-
-If the input rootfs was built for installed-system use and does not already
-contain `live-boot`/`live-config`, allow the ISO builder to fetch them during
-this step:
-
 ```sh
 ALLOW_NETWORK_FETCH=1 make iso \
-    ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
-    ROOTFS_SHA256=<sha256-of-rootfs.tar.zst> \
-    INSTALLER_UI=../dayshield-installer-ui/installer-ui
+  ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
+  ROOTFS_SHA256="$ROOTFS_SHA256" \
+  INSTALLER_UI=../dayshield-installer-ui/installer-ui
 ```
 
 This build writes a SHA256 checksum file next to the ISO:
