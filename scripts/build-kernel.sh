@@ -62,7 +62,7 @@ if [[ -z "${VMLINUZ}" ]]; then
 
     # shellcheck disable=SC2016  # $1 is intentionally expanded by the inner sh
     chroot "${ROOTFS_DIR}" /bin/sh -c \
-        'LANG=C LC_ALL=C apt-get -qq update && LANG=C LC_ALL=C apt-get -qq -y \
+        "LANG=C LC_ALL=C apt-get -qq update && LANG=C LC_ALL=C apt-get -qq -y \
             -o APT::Install-Recommends=false \
             -o APT::Install-Suggests=false \
             install "linux-image-$1"' -- "${ARCH}"

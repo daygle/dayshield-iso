@@ -16,7 +16,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${BUILD_DIR:="${SCRIPT_DIR}/../build"}"
 : "${CONFIG_DIR:="${SCRIPT_DIR}/../config"}"
-: "${ARCH:="amd64"}"
 : "${USE_DRACUT:="0"}"
 
 KERNEL_DIR="${BUILD_DIR}/kernel"
@@ -78,7 +77,7 @@ done
 if [[ "${USE_DRACUT}" == "1" ]] && command -v dracut &>/dev/null && [[ -n "${DRACUT_LIVE_MODULE}" ]]; then
     echo "--> Using dracut (dmsquash-live: ${DRACUT_LIVE_MODULE}) …"
 
-    DRACUT_CONF="$(mktemp --suffix=.conf)"
+    DRACUT_CONF="$(mktemp "/tmp/dayshield-dracut-XXXXXX.conf")"
     cat > "${DRACUT_CONF}" <<'EOF'
 # DayShield installer initrd configuration
 # 'network' is intentionally omitted - not available on all build hosts and

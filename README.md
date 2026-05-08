@@ -563,8 +563,7 @@ automatically starts the **web-based installer UI**:
 - `installer-ui-web.service` - serves the installer on `http://0.0.0.0:8443`
   (auto-enabled in `multi-user.target`)
 - `installer-ui.service` - opens a browser on `tty1` pointing at the above URL
-  (not auto-enabled by default, to avoid VM consoles appearing unresponsive
-  when tty ownership is transferred)
+  (auto-enabled in `multi-user.target`)
 
 Browser launch order if `installer-ui.service` is manually started on tty1:
 `epiphany-browser`, `firefox`, `chromium`, `surf`, then `midori`. If none are

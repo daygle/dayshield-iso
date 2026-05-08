@@ -12,7 +12,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${BUILD_DIR:="${SCRIPT_DIR}/../build"}"
 : "${CONFIG_DIR:="${SCRIPT_DIR}/../config"}"
-: "${ARCH:="amd64"}"
 
 BOOT_DIR="${BUILD_DIR}/bootloader"
 GRUB_BIOS_DIR="${BOOT_DIR}/boot/grub"

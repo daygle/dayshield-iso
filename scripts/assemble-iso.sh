@@ -181,6 +181,7 @@ xorriso -as mkisofs \
     -rational-rock \
     -joliet \
     -joliet-long \
+    -set_all_file_dates 0 \
     -volid "DAYSHIELD" \
     -publisher "DayShield Project" \
     -appid "DayShield Firewall OS Installer" \
