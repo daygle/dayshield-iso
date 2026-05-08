@@ -179,9 +179,24 @@ All checks should exit `[PASS]`.  The script validates:
 ```sh
 cd ~/dayshield-iso
 
+# Generate and persist the rootfs checksum (required by the ISO builder)
+sha256sum ../dayshield-rootfs/rootfs.tar.zst | awk '{print $1}' > ../dayshield-rootfs/rootfs.tar.zst.sha256
+ROOTFS_SHA256="$(cat ../dayshield-rootfs/rootfs.tar.zst.sha256)"
+
 ALLOW_NETWORK_FETCH=1 make iso \
   ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
   ROOTFS_SHA256="$ROOTFS_SHA256" \
+  INSTALLER_UI=../dayshield-installer-ui/installer-ui
+```
+
+If you prefer not to export a shell variable, you can rely on the sibling
+`../dayshield-rootfs/rootfs.tar.zst.sha256` file created above:
+
+```sh
+cd ~/dayshield-iso
+
+ALLOW_NETWORK_FETCH=1 make iso \
+  ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
   INSTALLER_UI=../dayshield-installer-ui/installer-ui
 ```
 
