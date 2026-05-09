@@ -50,7 +50,7 @@ source "$HOME/.cargo/env"
 
 See the [Build host packages](#build-host-packages) table for full details.
 
-Optional development tool:
+Optional quality-check tool:
 
 ```sh
 shellcheck
