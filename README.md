@@ -132,7 +132,8 @@ cp target/release/dayshield-core ~/dayshield-rootfs/dayshield-core
 ### Phase 4 - Build the root filesystem
 
 The management UI is a required component. Always build it before building
-the rootfs:
+the rootfs. To support GitHub-based core/UI updates on installed systems,
+the rootfs build also needs seeded git repos for both components:
 
 ```sh
 cd ~/dayshield-ui
@@ -140,11 +141,22 @@ npm install
 npm run build
 
 cd ~/dayshield-rootfs
-make rootfs UI_DIR=../dayshield-ui/dist
+make rootfs \
+  UI_DIR=../dayshield-ui/dist \
+  CORE_REPO_DIR=../dayshield-core \
+  UI_REPO_DIR=../dayshield-ui
 ```
 
 This copies the built UI into `/usr/local/share/dayshield-ui` inside the
 rootfs, which is the path expected by `dayshield-core`.
+
+It also seeds git working clones into the installed rootfs at:
+
+- `/opt/dayshield-core`
+- `/opt/dayshield-ui`
+
+These seeded repos are used by the DayShield update manager to check/apply/
+rollback updates against GitHub.
 
 This runs mmdebstrap, chroot-setup, installs dayshield-core, enables all
 services, hardens IPv4, and produces:
@@ -254,7 +266,10 @@ The existing `rootfs.tar.zst` is reused as-is - no rootfs rebuild needed.
 
 ```sh
 cd ~/dayshield-rootfs
-make clean && make rootfs
+make clean && make rootfs \
+  UI_DIR=../dayshield-ui/dist \
+  CORE_REPO_DIR=../dayshield-core \
+  UI_REPO_DIR=../dayshield-ui
 
 cd ~/dayshield-iso
 make clean
@@ -271,7 +286,10 @@ cargo build --release
 cp target/release/dayshield-core ~/dayshield-rootfs/dayshield-core
 
 cd ~/dayshield-rootfs
-make clean && make rootfs
+make clean && make rootfs \
+  UI_DIR=../dayshield-ui/dist \
+  CORE_REPO_DIR=../dayshield-core \
+  UI_REPO_DIR=../dayshield-ui
 
 cd ~/dayshield-iso
 make clean
@@ -358,6 +376,45 @@ systemctl status unbound
 systemctl status nftables
 systemctl status suricata
 systemctl status crowdsec
+
+### Troubleshooting - updater readiness
+
+If GitHub-based updates do not work on an installed system, run these checks.
+
+#### 1. Confirm required repos exist on the installed system
+
+```sh
+test -d /opt/dayshield-core/.git && echo "core repo present" || echo "core repo missing"
+test -d /opt/dayshield-ui/.git && echo "ui repo present" || echo "ui repo missing"
+```
+
+Both should report `present`.
+
+#### 2. Confirm git is installed on the installed system
+
+```sh
+command -v git && git --version
+```
+
+#### 3. Confirm each repo can reach GitHub origin
+
+```sh
+git -C /opt/dayshield-core remote -v
+git -C /opt/dayshield-ui remote -v
+git -C /opt/dayshield-core fetch --quiet origin main && echo "core fetch OK"
+git -C /opt/dayshield-ui fetch --quiet origin main && echo "ui fetch OK"
+```
+
+If fetch fails, verify DNS, gateway, and outbound firewall policy.
+
+#### 4. Common fixes
+
+- Missing `/opt/dayshield-core` or `/opt/dayshield-ui`:
+  Rebuild rootfs using Phase 4 with `CORE_REPO_DIR` and `UI_REPO_DIR`, then rebuild ISO and reinstall.
+- `git` missing:
+  Ensure you are using a rootfs built after the package-list update that includes git.
+- Wrong branch/repo URL in UI:
+  Open DayShield System -> Software Updates -> Settings and correct repo URL/branch.
 systemctl status ssh
 ```
 
