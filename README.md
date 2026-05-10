@@ -18,7 +18,8 @@ plus a SHA-256 checksum file.
 5. [Testing in QEMU](#testing-in-qemu)
 6. [Running the installer](#running-the-installer)
 7. [Integration with other repos](#integration-with-other-repos)
-8. [Design decisions](#design-decisions)
+8. [Release artifacts and update flow](#release-artifacts-and-update-flow)
+9. [Design decisions](#design-decisions)
 
 ---
 
@@ -723,6 +724,52 @@ npx tailwindcss -i styles.css -o dist/styles.css \
     --content "index.html,app.js" --minify
 # Then update the <link> in index.html to reference dist/styles.css
 ```
+
+---
+
+## Release artifacts and update flow
+
+You only need to create a version tag on `dayshield-core`.
+The release workflow in `dayshield-core/.github/workflows/release-artifacts.yml`
+automatically builds and publishes artifacts for all components:
+
+- `core-vX.Y.Z.tar.zst`
+- `ui-vX.Y.Z.tar.zst`
+- `rootfs-vX.Y.Z.tar.zst`
+- `checksums.txt`
+
+### Step-by-step
+
+1. Ensure all required changes are merged to the source branches:
+  - `dayshield-core` (core binary)
+  - `dayshield-ui` (web UI bundle)
+  - `dayshield-rootfs` (rootfs content)
+2. Create a tag in `dayshield-core` using either method:
+  - GitHub web: Releases -> Draft a new release -> Create new tag `vX.Y.Z`
+  - CLI:
+
+```sh
+cd ~/dayshield-core
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+3. GitHub Actions runs automatically on tag push and creates a GitHub Release
+  containing all update artifacts.
+4. Installed systems check the registry/release endpoint and show available
+  versions in DayShield System -> Software Updates.
+
+### Important behavior
+
+- You do not need separate tags in `dayshield-ui` or `dayshield-rootfs` for
+  this workflow.
+- The workflow currently checks out `main` for UI and rootfs at build time, so
+  release reproducibility depends on branch state when the tag runs.
+
+For deeper details, see:
+
+- `../dayshield-core/UPDATE_SYSTEM.md`
+- `../dayshield-core/RELEASE_QUICK_START.md`
 
 ---
 
