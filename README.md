@@ -144,7 +144,8 @@ cd ~/dayshield-rootfs
 make rootfs \
   UI_DIR=../dayshield-ui/dist \
   CORE_REPO_DIR=../dayshield-core \
-  UI_REPO_DIR=../dayshield-ui
+  UI_REPO_DIR=../dayshield-ui \
+  ROOTFS_REPO_DIR=../dayshield-rootfs
 ```
 
 This copies the built UI into `/usr/local/share/dayshield-ui` inside the
@@ -154,9 +155,14 @@ It also seeds git working clones into the installed rootfs at:
 
 - `/opt/dayshield-core`
 - `/opt/dayshield-ui`
+- `/opt/dayshield-rootfs`
 
 These seeded repos are used by the DayShield update manager to check/apply/
 rollback updates against GitHub.
+
+No extra ISO-only step is required for this. The requirement is satisfied by
+building `rootfs.tar.zst` with the repo paths above, then running the normal
+ISO build steps in Phase 5.
 
 This runs mmdebstrap, chroot-setup, installs dayshield-core, enables all
 services, hardens IPv4, and produces:
