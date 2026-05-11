@@ -1,0 +1,105 @@
+name: Build and Release ISO
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build from (for example v1.0.1)
+        required: true
+        type: string
+      core_repo:
+        description: Core repository that hosts release artifacts
+        required: false
+        default: daygle/dayshield-core
+        type: string
+  repository_dispatch:
+    types: [build-iso-from-release]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release-iso:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.event.client_payload.tag }}
+      CORE_REPO: ${{ github.event.inputs.core_repo || github.event.client_payload.core_repo || 'daygle/dayshield-core' }}
+    steps:
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          if [ -z "${RELEASE_TAG}" ]; then
+            echo "RELEASE_TAG is required"
+            exit 1
+          fi
+          echo "Building ISO for tag: ${RELEASE_TAG}"
+          echo "Using core artifacts from: ${CORE_REPO}"
+
+      - name: Checkout ISO repository
+        uses: actions/checkout@v5
+
+      - name: Checkout installer UI repository
+        uses: actions/checkout@v5
+        with:
+          repository: daygle/dayshield-installer-ui
+          path: deps/dayshield-installer-ui
+          ref: main
+
+      - name: Install ISO build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            xorriso squashfs-tools grub-pc-bin grub-efi-amd64-bin \
+            dosfstools dracut zstd parted rsync util-linux \
+            mmdebstrap systemd-container
+
+      - name: Download rootfs artifact and checksums
+        env:
+          GH_TOKEN: ${{ secrets.CORE_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          gh release download "${RELEASE_TAG}" \
+            --repo "${CORE_REPO}" \
+            --pattern "rootfs-${RELEASE_TAG}.tar.zst" \
+            --pattern "checksums.txt" \
+            --dir artifacts
+          ls -lh artifacts
+
+      - name: Verify rootfs checksum
+        run: |
+          set -euo pipefail
+          cd artifacts
+          grep "rootfs-${RELEASE_TAG}.tar.zst" checksums.txt > rootfs.sha256
+          sha256sum -c rootfs.sha256
+          ROOTFS_SHA256="$(awk '{print $1}' rootfs.sha256)"
+          echo "ROOTFS_SHA256=${ROOTFS_SHA256}" >> "$GITHUB_ENV"
+          echo "Verified rootfs checksum: ${ROOTFS_SHA256}"
+
+      - name: Build ISO
+        run: |
+          set -euo pipefail
+          make clean
+          make iso \
+            ROOTFS="artifacts/rootfs-${RELEASE_TAG}.tar.zst" \
+            ROOTFS_SHA256="${ROOTFS_SHA256}" \
+            INSTALLER_UI="deps/dayshield-installer-ui/installer-ui"
+
+      - name: Generate ISO checksum
+        run: |
+          set -euo pipefail
+          sha256sum dayshield.iso > dayshield.iso.sha256
+          cat dayshield.iso.sha256
+
+      - name: Create or update ISO release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ISO ${{ env.RELEASE_TAG }}
+          files: |
+            dayshield.iso
+            dayshield.iso.sha256
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
