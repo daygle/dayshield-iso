@@ -22,6 +22,7 @@ jobs:
   build-and-release-iso:
     runs-on: ubuntu-latest
     env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       RELEASE_TAG: ${{ github.event.inputs.tag || github.event.client_payload.tag }}
       CORE_REPO: ${{ github.event.inputs.core_repo || github.event.client_payload.core_repo || 'daygle/dayshield-core' }}
       ISO_NAME: dayshield-${{ github.event.inputs.tag || github.event.client_payload.tag }}.iso

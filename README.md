@@ -108,7 +108,7 @@ rustc --version
 ```sh
 cd ~/dayshield-core
 
-# Build release binary
+# Build release binary locally only if you are doing a manual developer build
 cargo build --release
 
 # Copy into dayshield-rootfs so the rootfs builder can find it
@@ -120,8 +120,7 @@ cp target/release/dayshield-core ~/dayshield-rootfs/dayshield-core
 ### Phase 4 - Build the root filesystem
 
 The management UI is a required component. Always build it before building
-the rootfs. To support GitHub-based core/UI updates on installed systems,
-the rootfs build also needs seeded git repos for both components:
+the rootfs for local development builds:
 
 ```sh
 cd ~/dayshield-ui
@@ -138,15 +137,6 @@ make rootfs \
 
 This copies the built UI into `/usr/local/share/dayshield-ui` inside the
 rootfs, which is the path expected by `dayshield-core`.
-
-It also seeds git working clones into the installed rootfs at:
-
-- `/opt/dayshield-core`
-- `/opt/dayshield-ui`
-- `/opt/dayshield-rootfs`
-
-These seeded repos are used by the DayShield update manager to check/apply/
-rollback updates against GitHub.
 
 No extra ISO-only step is required for this. The requirement is satisfied by
 building `rootfs.tar.zst` with the repo paths above, then running the normal
@@ -752,6 +742,8 @@ git push origin v1.2.3
   this workflow.
 - The workflow currently checks out `main` for UI and rootfs at build time, so
   release reproducibility depends on branch state when the tag runs.
+- Installed systems use these published artifacts through the registry-based
+  updater; they do not build core or UI locally.
 
 For deeper details, see:
 
