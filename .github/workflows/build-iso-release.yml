@@ -81,7 +81,7 @@ jobs:
         run: |
           set -euo pipefail
           make clean
-          make iso \
+          ALLOW_NETWORK_FETCH=1 make iso \
             ROOTFS="artifacts/rootfs-${RELEASE_TAG}.tar.zst" \
             ROOTFS_SHA256="${ROOTFS_SHA256}" \
             INSTALLER_UI="deps/dayshield-installer-ui/installer-ui"
