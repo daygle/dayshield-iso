@@ -80,11 +80,12 @@ jobs:
       - name: Build ISO
         run: |
           set -euo pipefail
-          make clean
-          ALLOW_NETWORK_FETCH=1 make iso \
+          sudo make clean
+          sudo ALLOW_NETWORK_FETCH=1 make iso \
             ROOTFS="artifacts/rootfs-${RELEASE_TAG}.tar.zst" \
             ROOTFS_SHA256="${ROOTFS_SHA256}" \
             INSTALLER_UI="deps/dayshield-installer-ui/installer-ui"
+          sudo chown -R "$(id -u):$(id -g)" .
 
       - name: Generate ISO checksum
         run: |
