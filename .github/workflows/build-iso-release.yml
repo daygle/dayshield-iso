@@ -24,6 +24,7 @@ jobs:
     env:
       RELEASE_TAG: ${{ github.event.inputs.tag || github.event.client_payload.tag }}
       CORE_REPO: ${{ github.event.inputs.core_repo || github.event.client_payload.core_repo || 'daygle/dayshield-core' }}
+      ISO_NAME: dayshield-${{ github.event.inputs.tag || github.event.client_payload.tag }}.iso
     steps:
       - name: Validate inputs
         run: |
@@ -84,14 +85,15 @@ jobs:
           sudo ALLOW_NETWORK_FETCH=1 make iso \
             ROOTFS="artifacts/rootfs-${RELEASE_TAG}.tar.zst" \
             ROOTFS_SHA256="${ROOTFS_SHA256}" \
-            INSTALLER_UI="deps/dayshield-installer-ui/installer-ui"
+            INSTALLER_UI="deps/dayshield-installer-ui/installer-ui" \
+            OUTPUT="${ISO_NAME}"
           sudo chown -R "$(id -u):$(id -g)" .
 
       - name: Generate ISO checksum
         run: |
           set -euo pipefail
-          sha256sum dayshield.iso > dayshield.iso.sha256
-          cat dayshield.iso.sha256
+          sha256sum "${ISO_NAME}" > "${ISO_NAME}.sha256"
+          cat "${ISO_NAME}.sha256"
 
       - name: Create or update ISO release
         uses: softprops/action-gh-release@v2
@@ -99,8 +101,8 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           name: ISO ${{ env.RELEASE_TAG }}
           files: |
-            dayshield.iso
-            dayshield.iso.sha256
+            ${{ env.ISO_NAME }}
+            ${{ env.ISO_NAME }}.sha256
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
