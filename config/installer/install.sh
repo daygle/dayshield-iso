@@ -35,10 +35,23 @@ exec > >(tee -a "${LOG_FILE}") 2>&1
 # Helpers
 # ---------------------------------------------------------------------------
 info()  { echo "[INFO]  $*"; }
+warn()  { echo "[WARN]  $*" >&2; }
 error() { echo "[ERROR] $*" >&2; exit 1; }
 
 require_root() {
     [[ "${EUID}" -eq 0 ]] || error "This installer must be run as root."
+}
+
+cleanup_chroot_mounts() {
+    for _mount_point in run sys proc dev/pts dev; do
+        umount -lf "${TARGET_MOUNT}/${_mount_point}" 2>/dev/null || true
+    done
+}
+
+cleanup_all_mounts() {
+    cleanup_chroot_mounts
+    umount -lf "${TARGET_MOUNT}/boot/efi" 2>/dev/null || true
+    umount -lf "${TARGET_MOUNT}" 2>/dev/null || true
 }
 
 configure_ssh_access() {
@@ -282,7 +295,7 @@ detect_target_disk() {
 # Main installation flow
 # ---------------------------------------------------------------------------
 require_root
-trap cleanup_install_mounts EXIT
+trap cleanup_all_mounts EXIT
 
 TARGET_DISK="${DAYSHIELD_TARGET_DISK:-}"
 
@@ -343,19 +356,6 @@ mount "${ROOT_PART}" "${TARGET_MOUNT}"
 mkdir -p "${TARGET_MOUNT}/boot/efi"
 mount "${EFI_PART}" "${TARGET_MOUNT}/boot/efi"
 
-# Register a top-level cleanup trap so that target partitions are always
-# unmounted on any subsequent failure, including from sub-scripts.
-cleanup_all_mounts() {
-    # Pseudo-filesystems (may or may not be mounted at this point)
-    for _mount_point in run sys proc dev/pts dev; do
-        umount -lf "${TARGET_MOUNT}/${_mount_point}" 2>/dev/null || true
-    done
-    # Target partitions
-    umount -lf "${TARGET_MOUNT}/boot/efi" 2>/dev/null || true
-    umount -lf "${TARGET_MOUNT}" 2>/dev/null || true
-}
-trap cleanup_all_mounts EXIT
-
 # ---------------------------------------------------------------------------
 # Extract rootfs
 # ---------------------------------------------------------------------------
@@ -412,7 +412,6 @@ printf 'root:%s\n' "${INSTALL_ROOT_PASSWORD}" | chroot "${TARGET_MOUNT}" chpassw
 unset INSTALL_ROOT_PASSWORD
 
 cleanup_chroot_mounts
-trap cleanup_all_mounts EXIT
 
 # ---------------------------------------------------------------------------
 # Configure target system
@@ -423,11 +422,6 @@ configure_ssh_access
 # Write a fresh machine-id (will be fully regenerated on first boot by systemd)
 info "Writing machine-id …"
 truncate -s 0 "${TARGET_MOUNT}/etc/machine-id"
-
-info "Setting hostname and root password …"
-printf '%s\n' "${INSTALL_HOSTNAME}" > "${TARGET_MOUNT}/etc/hostname"
-printf 'root:%s\n' "${ROOT_PASSWORD}" | chroot "${TARGET_MOUNT}" chpasswd
-unset ROOT_PASSWORD
 
 # Write fstab
 info "Writing /etc/fstab …"
@@ -476,7 +470,7 @@ Name=${INSTALL_LAN_IFACE}
 Address=${LAN_CIDR}
 IPv6AcceptRA=no
 EOF
-info "Network defaults written (eth0/eth1). Adjust interface names after install if needed."
+info "Network configuration written for WAN=${INSTALL_WAN_IFACE} and LAN=${INSTALL_LAN_IFACE}."
 
 # Enable systemd-networkd on the target by creating the
 # required symlinks directly.  Pseudo-filesystem bind mounts were torn down
@@ -508,46 +502,6 @@ ln -sf /dev/null "${SYSTEMD_DIR}/systemd-resolved.service" 2>/dev/null || true
 # /run/systemd/resolve/resolv.conf is never populated; a plain file is safer.
 rm -f "${TARGET_MOUNT}/etc/resolv.conf"
 printf 'nameserver 127.0.0.1\n' > "${TARGET_MOUNT}/etc/resolv.conf"
-
-# ---------------------------------------------------------------------------
-# Hostname and root password configuration
-# ---------------------------------------------------------------------------
-HOSTNAME_VALUE="${DAYSHIELD_HOSTNAME:-dayshield}"
-# RFC 1123-ish hostname validation:
-# - labels are alnum plus interior hyphens
-# - each label <=63 chars
-# - labels separated by dots
-if [[ ! "${HOSTNAME_VALUE}" =~ ^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)(\.([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?))*$ ]]; then
-    error "Invalid hostname: ${HOSTNAME_VALUE}"
-fi
-printf '%s\n' "${HOSTNAME_VALUE}" > "${TARGET_MOUNT}/etc/hostname"
-cat > "${TARGET_MOUNT}/etc/hosts" <<EOF
-127.0.0.1 localhost
-127.0.1.1 ${HOSTNAME_VALUE}
-::1 localhost ip6-localhost ip6-loopback
-EOF
-
-ROOT_PASSWORD_HASH="${DAYSHIELD_ROOT_PASSWORD_HASH:-}"
-if [[ -n "${ROOT_PASSWORD_HASH}" ]]; then
-    printf 'root:%s\n' "${ROOT_PASSWORD_HASH}" | chroot "${TARGET_MOUNT}" chpasswd -e
-elif [[ "${DAYSHIELD_UNATTENDED:-}" == "1" ]]; then
-    error "DAYSHIELD_UNATTENDED=1 requires DAYSHIELD_ROOT_PASSWORD_HASH."
-else
-    while true; do
-        read -rsp "Enter root password for installed system: " ROOT_PASSWORD
-        echo ""
-        read -rsp "Confirm root password: " ROOT_PASSWORD_CONFIRM
-        echo ""
-        [[ -n "${ROOT_PASSWORD}" ]] || { echo "Password cannot be empty."; continue; }
-        [[ "${ROOT_PASSWORD}" == "${ROOT_PASSWORD_CONFIRM}" ]] || { echo "Passwords do not match."; continue; }
-        if ! printf 'root:%s\n' "${ROOT_PASSWORD}" | chroot "${TARGET_MOUNT}" chpasswd; then
-            unset ROOT_PASSWORD ROOT_PASSWORD_CONFIRM
-            error "Failed to set root password in target system."
-        fi
-        unset ROOT_PASSWORD ROOT_PASSWORD_CONFIRM
-        break
-    done
-fi
 
 # ---------------------------------------------------------------------------
 # Firstboot marker
