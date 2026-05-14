@@ -62,20 +62,27 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts
+          ROOTFS_ASSET="rootfs-${RELEASE_TAG}.tar.zst"
           gh release download "${RELEASE_TAG}" \
             --repo "${CORE_REPO}" \
-            --pattern "core-${RELEASE_TAG}.tar.zst" \
+            --pattern "${ROOTFS_ASSET}" \
             --pattern "checksums.txt" \
             --dir artifacts
+          if [ ! -f "artifacts/${ROOTFS_ASSET}" ]; then
+            echo "ERROR: missing release asset ${ROOTFS_ASSET} in ${CORE_REPO}@${RELEASE_TAG}" >&2
+            echo "Available assets:" >&2
+            gh release view "${RELEASE_TAG}" --repo "${CORE_REPO}" --json assets --jq '.assets[].name' >&2 || true
+            exit 1
+          fi
           ls -lh artifacts
 
       - name: Verify rootfs checksum
         run: |
           set -euo pipefail
           cd artifacts
-          grep "core-${RELEASE_TAG}.tar.zst" checksums.txt > core.sha256
-          sha256sum -c core.sha256
-          ROOTFS_SHA256="$(awk '{print $1}' core.sha256)"
+          grep "rootfs-${RELEASE_TAG}.tar.zst" checksums.txt > rootfs.sha256
+          sha256sum -c rootfs.sha256
+          ROOTFS_SHA256="$(awk '{print $1}' rootfs.sha256)"
           echo "ROOTFS_SHA256=${ROOTFS_SHA256}" >> "$GITHUB_ENV"
           echo "Verified rootfs checksum: ${ROOTFS_SHA256}"
 
@@ -84,7 +91,7 @@ jobs:
           set -euo pipefail
           sudo make clean
           sudo ALLOW_NETWORK_FETCH=1 make iso \
-            ROOTFS="artifacts/core-${RELEASE_TAG}.tar.zst" \
+            ROOTFS="artifacts/rootfs-${RELEASE_TAG}.tar.zst" \
             ROOTFS_SHA256="${ROOTFS_SHA256}" \
             INSTALLER_UI="deps/dayshield-installer-ui/installer-ui" \
             OUTPUT="${ISO_NAME}"
