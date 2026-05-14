@@ -30,6 +30,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${ALLOW_NETWORK_FETCH:="0"}"
 
 ROOTFS_DIR="${BUILD_DIR}/rootfs"
+CHROOT_SHELL=""
+CHROOT_SHELL_IS_BUSYBOX="0"
 
 if [[ ! -d "${ROOTFS_DIR}" ]]; then
     echo "ERROR: rootfs directory not found: ${ROOTFS_DIR}" >&2
@@ -42,6 +44,38 @@ fi
 _pkg_installed() {
     dpkg-query --root="${ROOTFS_DIR}" -W -f='${Status}' "$1" 2>/dev/null \
         | grep -q "install ok installed"
+}
+
+_resolve_chroot_shell() {
+    local candidate
+    for candidate in \
+        /bin/sh \
+        /usr/bin/sh \
+        /bin/bash \
+        /usr/bin/bash \
+        /bin/dash \
+        /usr/bin/dash \
+        /bin/busybox \
+        /usr/bin/busybox
+    do
+        if [[ -x "${ROOTFS_DIR}${candidate}" ]]; then
+            CHROOT_SHELL="${candidate}"
+            if [[ "${candidate}" == */busybox ]]; then
+                CHROOT_SHELL_IS_BUSYBOX="1"
+            fi
+            return 0
+        fi
+    done
+    return 1
+}
+
+_chroot_run() {
+    local cmd="$1"
+    if [[ "${CHROOT_SHELL_IS_BUSYBOX}" == "1" ]]; then
+        chroot "${ROOTFS_DIR}" "${CHROOT_SHELL}" sh -c "${cmd}"
+    else
+        chroot "${ROOTFS_DIR}" "${CHROOT_SHELL}" -c "${cmd}"
+    fi
 }
 
 _normalize_live_fstab() {
@@ -63,6 +97,13 @@ fi
 if [[ "${ALLOW_NETWORK_FETCH}" != "1" ]]; then
     echo "ERROR: live-boot packages are missing in rootfs and network fetch is disabled." >&2
     echo "       Rebuild rootfs with required packages or set ALLOW_NETWORK_FETCH=1 explicitly." >&2
+    exit 1
+fi
+
+if ! _resolve_chroot_shell; then
+    echo "ERROR: cannot run commands in rootfs; no shell binary found." >&2
+    echo "       Checked: /bin/sh, /usr/bin/sh, bash, dash, busybox." >&2
+    echo "       Verify the rootfs archive was built correctly for the requested architecture." >&2
     exit 1
 fi
 
@@ -101,7 +142,7 @@ trap cleanup_mounts EXIT
 #                              autologin, etc.).
 # live-config-systemd        - systemd units for live-config.
 INIT_LOG="$(mktemp "${BUILD_DIR}/ensure-live-boot-XXXXXX.log")"
-if chroot "${ROOTFS_DIR}" /bin/sh -c \
+if _chroot_run \
     'LANG=C LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get -qq update && \
      LANG=C LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get -qq -y \
          -o APT::Install-Recommends=false \

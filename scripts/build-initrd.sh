@@ -21,6 +21,46 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KERNEL_DIR="${BUILD_DIR}/kernel"
 ROOTFS_DIR="${BUILD_DIR}/rootfs"
 INSTALLER_SRC="${CONFIG_DIR}/installer"
+CHROOT_SHELL=""
+CHROOT_SHELL_IS_BUSYBOX="0"
+
+resolve_chroot_shell() {
+    local candidate
+    for candidate in \
+        /bin/sh \
+        /usr/bin/sh \
+        /bin/bash \
+        /usr/bin/bash \
+        /bin/dash \
+        /usr/bin/dash \
+        /bin/busybox \
+        /usr/bin/busybox
+    do
+        if [[ -x "${ROOTFS_DIR}${candidate}" ]]; then
+            CHROOT_SHELL="${candidate}"
+            if [[ "${candidate}" == */busybox ]]; then
+                CHROOT_SHELL_IS_BUSYBOX="1"
+            fi
+            return 0
+        fi
+    done
+    return 1
+}
+
+chroot_run() {
+    local cmd="$1"
+    if [[ "${CHROOT_SHELL_IS_BUSYBOX}" == "1" ]]; then
+        chroot "${ROOTFS_DIR}" "${CHROOT_SHELL}" sh -c "${cmd}"
+    else
+        chroot "${ROOTFS_DIR}" "${CHROOT_SHELL}" -c "${cmd}"
+    fi
+}
+
+if ! resolve_chroot_shell; then
+    echo "ERROR: cannot run chrooted commands in rootfs; no shell binary found." >&2
+    echo "       Checked: /bin/sh, /usr/bin/sh, bash, dash, busybox." >&2
+    exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # Determine kernel version
@@ -111,7 +151,7 @@ EOF
 # ---------------------------------------------------------------------------
 # Default: mkinitramfs (CHROOTED)
 # ---------------------------------------------------------------------------
-elif command -v mkinitramfs &>/dev/null || chroot "${ROOTFS_DIR}" sh -c 'command -v mkinitramfs' &>/dev/null; then
+elif command -v mkinitramfs &>/dev/null || chroot_run 'command -v mkinitramfs' &>/dev/null; then
     echo "--> Using mkinitramfs (chrooted) …"
 
     # Create hook inside rootfs
@@ -165,7 +205,7 @@ HOOK
     trap cleanup_initrd_mounts EXIT
 
     INITRD_LOG="$(mktemp "${BUILD_DIR}/initrd-mkinitramfs-XXXXXX.log")"
-    if chroot "${ROOTFS_DIR}" /usr/sbin/mkinitramfs -o /tmp/initrd.img "${KERNEL_VERSION}" >"${INITRD_LOG}" 2>&1; then
+    if chroot_run "/usr/sbin/mkinitramfs -o /tmp/initrd.img ${KERNEL_VERSION}" >"${INITRD_LOG}" 2>&1; then
         grep -v "Couldn't identify type of root file system .* for fsck hook" "${INITRD_LOG}" || true
     else
         grep -v "Couldn't identify type of root file system .* for fsck hook" "${INITRD_LOG}" >&2 || true
