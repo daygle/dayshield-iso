@@ -73,9 +73,9 @@ jobs:
         run: |
           set -euo pipefail
           cd artifacts
-          grep "core-${RELEASE_TAG}.tar.zst" checksums.txt > rootfs.sha256
-          sha256sum -c rootfs.sha256
-          ROOTFS_SHA256="$(awk '{print $1}' rootfs.sha256)"
+          grep "core-${RELEASE_TAG}.tar.zst" checksums.txt > core.sha256
+          sha256sum -c core.sha256
+          ROOTFS_SHA256="$(awk '{print $1}' core.sha256)"
           echo "ROOTFS_SHA256=${ROOTFS_SHA256}" >> "$GITHUB_ENV"
           echo "Verified rootfs checksum: ${ROOTFS_SHA256}"
 
