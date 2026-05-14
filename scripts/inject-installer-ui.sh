@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# inject-installer-ui.sh — Inject installer web UI files into the live rootfs
+# inject-installer-ui.sh - Inject installer web UI files into the live rootfs
 #                           before the squashfs image is built.
 #
 # This script runs AFTER extract-rootfs.sh and BEFORE build-squashfs.sh.

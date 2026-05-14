@@ -142,7 +142,7 @@ HOOK
 
     # Run mkinitramfs inside the rootfs so it sees the correct modules + payload
     if [[ -z "${KERNEL_VERSION}" ]]; then
-        echo "ERROR: KERNEL_VERSION is empty — cannot build initrd." >&2
+        echo "ERROR: KERNEL_VERSION is empty - cannot build initrd." >&2
         echo "       Ensure build-kernel.sh completed successfully and the kernel is named vmlinuz-<version>." >&2
         exit 1
     fi

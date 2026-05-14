@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2317
-# verify.sh — Verify a DayShield installer ISO.
+# verify.sh - Verify a DayShield installer ISO.
 #
 # Checks:
 #   1. ISO contains squashfs, kernel, initrd, GRUB config, installer scripts
@@ -146,7 +146,7 @@ if test -f "${ISO_MOUNT}/boot/grub/bios.img"; then
     check "boot/grub/bios.img is non-empty (BIOS boot available)" \
         test -s "${ISO_MOUNT}/boot/grub/bios.img"
 else
-    echo "  [INFO] boot/grub/bios.img absent — UEFI-only ISO"
+    echo "  [INFO] boot/grub/bios.img absent - UEFI-only ISO"
 fi
 check "EFI/BOOT/BOOTX64.EFI exists"        test -f "${ISO_MOUNT}/EFI/BOOT/BOOTX64.EFI"
 check "EFI/BOOT/BOOTX64.EFI is non-empty"  test -s "${ISO_MOUNT}/EFI/BOOT/BOOTX64.EFI"
@@ -208,7 +208,7 @@ if command -v xorriso &>/dev/null; then
     fi
     # BIOS El Torito entry is optional for UEFI-only ISOs.
     if ! test -f "${ISO_MOUNT}/boot/grub/bios.img"; then
-        echo "  [INFO] Skipping BIOS El Torito check (UEFI-only ISO — bios.img absent)"
+        echo "  [INFO] Skipping BIOS El Torito check (UEFI-only ISO - bios.img absent)"
     elif check "El Torito report contains BIOS boot image" \
            grep -q 'bios\.img' "${ELTORITO_TMP}"; then
         true

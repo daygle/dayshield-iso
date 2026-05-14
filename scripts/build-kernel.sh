@@ -88,7 +88,7 @@ fi
 # Find an initrd that matches the selected kernel version exactly; fall back to
 # the most-recent non-RT initrd.  Two separate find calls are used because find
 # exits 0 even when nothing matches, so the || operator cannot trigger the
-# fallback — we must check the result explicitly instead.
+# fallback - we must check the result explicitly instead.
 INITRD="$(find "${ROOTFS_DIR}/boot" -maxdepth 1 -name "initrd.img-${KVER}" -type f 2>/dev/null | head -n1)"
 if [[ -z "${INITRD}" ]]; then
     INITRD="$(find "${ROOTFS_DIR}/boot" -maxdepth 1 -name 'initrd.img*' -type f 2>/dev/null \

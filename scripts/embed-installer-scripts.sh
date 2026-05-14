@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# embed-installer-scripts.sh — Copy the CLI installer scripts into the live
+# embed-installer-scripts.sh - Copy the CLI installer scripts into the live
 # rootfs so that they are present inside the squashfs image and available at
 # /usr/lib/dayshield-installer/ in the live session after switch_root.
 #

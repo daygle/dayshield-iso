@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# extract-rootfs.sh — Extract rootfs.tar.zst into build/rootfs/.
+# extract-rootfs.sh - Extract rootfs.tar.zst into build/rootfs/.
 #
 # Security notes:
 #   • No device nodes created (--no-same-owner combined with explicit exclusions)
@@ -39,9 +39,9 @@ mkdir -p "${ROOTFS_DIR}"
 umask 022
 
 # Extract with:
-#   --no-same-owner    — do not restore original ownership (run as current user)
-#   --no-same-permissions — apply umask instead of archive permissions
-#   --exclude=./dev    — skip device nodes entirely
+#   --no-same-owner    - do not restore original ownership (run as current user)
+#   --no-same-permissions - apply umask instead of archive permissions
+#   --exclude=./dev    - skip device nodes entirely
 # Determine decompression strategy upfront to avoid silencing real errors
 if command -v zstd &>/dev/null; then
     DECOMPRESS_ARGS=(--use-compress-program="zstd -d")

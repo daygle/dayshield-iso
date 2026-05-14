@@ -1,4 +1,4 @@
-# DayShield ISO Builder — Makefile
+# DayShield ISO Builder - Makefile
 #
 # Usage:
 #   make iso ROOTFS=../dayshield-rootfs/rootfs.tar.zst ROOTFS_SHA256=<sha256>

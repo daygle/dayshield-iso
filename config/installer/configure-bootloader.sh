@@ -48,7 +48,7 @@ chroot "${TARGET}" grub-install \
     --bootloader-id=dayshield \
     --recheck \
     --no-nvram \
-    || { echo "ERROR: UEFI grub-install failed — UEFI boot will not work. Aborting." >&2; exit 1; }
+    || { echo "ERROR: UEFI grub-install failed - UEFI boot will not work. Aborting." >&2; exit 1; }
 
 # Copy the EFI binary to the UEFI spec fallback path (/EFI/BOOT/BOOTX64.EFI).
 # --no-nvram skips writing an NVRAM boot variable; without the fallback path,

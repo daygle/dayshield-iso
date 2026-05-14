@@ -1,4 +1,4 @@
-# DayShield ISO builder — Git ignore file
+# DayShield ISO builder - Git ignore file
 
 # Intermediate build artefacts
 build/

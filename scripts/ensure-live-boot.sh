@@ -93,13 +93,13 @@ trap cleanup_mounts EXIT
 # ---------------------------------------------------------------------------
 # Install the live-boot stack into the live rootfs
 # ---------------------------------------------------------------------------
-# live-boot-initramfs-tools  — provides the mkinitramfs hook that enables
+# live-boot-initramfs-tools  - provides the mkinitramfs hook that enables
 #                              live-boot when BOOT=live is set.
-# live-boot                  — the actual live-boot scripts (boot/live scripts
+# live-boot                  - the actual live-boot scripts (boot/live scripts
 #                              executed by the initrd).
-# live-config                — configures the running live session (hostname,
+# live-config                - configures the running live session (hostname,
 #                              autologin, etc.).
-# live-config-systemd        — systemd units for live-config.
+# live-config-systemd        - systemd units for live-config.
 INIT_LOG="$(mktemp "${BUILD_DIR}/ensure-live-boot-XXXXXX.log")"
 if chroot "${ROOTFS_DIR}" /bin/sh -c \
     'LANG=C LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get -qq update && \
