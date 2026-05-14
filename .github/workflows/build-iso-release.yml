@@ -64,7 +64,7 @@ jobs:
           mkdir -p artifacts
           gh release download "${RELEASE_TAG}" \
             --repo "${CORE_REPO}" \
-            --pattern "rootfs-${RELEASE_TAG}.tar.zst" \
+            --pattern "core-${RELEASE_TAG}.tar.zst" \
             --pattern "checksums.txt" \
             --dir artifacts
           ls -lh artifacts
@@ -73,9 +73,9 @@ jobs:
         run: |
           set -euo pipefail
           cd artifacts
-          grep "rootfs-${RELEASE_TAG}.tar.zst" checksums.txt > rootfs.sha256
-          sha256sum -c rootfs.sha256
-          ROOTFS_SHA256="$(awk '{print $1}' rootfs.sha256)"
+          grep "core-${RELEASE_TAG}.tar.zst" checksums.txt > core.sha256
+          sha256sum -c core.sha256
+          ROOTFS_SHA256="$(awk '{print $1}' core.sha256)"
           echo "ROOTFS_SHA256=${ROOTFS_SHA256}" >> "$GITHUB_ENV"
           echo "Verified rootfs checksum: ${ROOTFS_SHA256}"
 
@@ -84,7 +84,7 @@ jobs:
           set -euo pipefail
           sudo make clean
           sudo ALLOW_NETWORK_FETCH=1 make iso \
-            ROOTFS="artifacts/rootfs-${RELEASE_TAG}.tar.zst" \
+            ROOTFS="artifacts/core-${RELEASE_TAG}.tar.zst" \
             ROOTFS_SHA256="${ROOTFS_SHA256}" \
             INSTALLER_UI="deps/dayshield-installer-ui/installer-ui" \
             OUTPUT="${ISO_NAME}"
