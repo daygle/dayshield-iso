@@ -216,6 +216,33 @@ kernel -> initrd -> bootloader -> assemble) and produces:
 ~/dayshield-iso/dayshield.iso
 ```
 
+#### Troubleshooting: `live-boot scripts not found in initrd`
+
+If Phase 5 fails at `build-initrd.sh` with:
+
+```text
+ERROR: live-boot scripts not found in initrd; ISO will not boot.
+```
+
+run these checks on the build host:
+
+```sh
+# 1) Confirm live-boot packages exist in the extracted rootfs
+dpkg-query --root ./build/rootfs -W -f='${Package} ${Status}\n' \
+  live-boot live-boot-initramfs-tools live-config live-config-systemd
+
+# 2) Re-run with network fallback enabled if any package is missing
+ALLOW_NETWORK_FETCH=1 make iso \
+  ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
+  INSTALLER_UI=../dayshield-installer-ui/installer-ui
+```
+
+Notes:
+
+- GitHub builds often succeed because network fetch is available in CI.
+- Local/offline servers must either include these packages in the input rootfs or set `ALLOW_NETWORK_FETCH=1`.
+- Newer `live-boot` layouts may use `/usr/lib/live` paths in initrd; use the latest `dayshield-iso` scripts.
+
 #### Verify the ISO (optional)
 
 ```sh

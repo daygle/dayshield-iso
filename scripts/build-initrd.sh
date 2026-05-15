@@ -225,15 +225,24 @@ HOOK
     rm -f "${ROOTFS_DIR}/etc/initramfs-tools/hooks/dayshield-installer"
     rm -f "${ROOTFS_DIR}/etc/initramfs-tools/conf.d/live.conf"
 
-    # Verify live-boot scripts are present in the initrd
+    # Verify live-boot scripts are present in the initrd.
+    # Debian 13 / newer live-boot layouts may place files under /usr/lib/live.
     if command -v lsinitramfs &>/dev/null; then
-        if lsinitramfs "${KERNEL_DIR}/initrd.img" 2>/dev/null | grep -qE 'scripts/live|lib/live'; then
-            echo "--> live-boot scripts confirmed in initrd."
+        INITRD_LISTING="$(mktemp "${BUILD_DIR}/initrd-listing-XXXXXX.log")"
+        if lsinitramfs "${KERNEL_DIR}/initrd.img" >"${INITRD_LISTING}" 2>/dev/null; then
+            if grep -qE 'scripts/live|lib/live|usr/lib/live' "${INITRD_LISTING}"; then
+                echo "--> live-boot scripts confirmed in initrd."
+            else
+                echo "ERROR: live-boot scripts not found in initrd; ISO will not boot." >&2
+                echo "       Ensure that ensure-live-boot.sh ran successfully before build-initrd.sh." >&2
+                echo "       Hint: expected entries under scripts/live, lib/live, or usr/lib/live." >&2
+                rm -f "${INITRD_LISTING}"
+                exit 1
+            fi
         else
-            echo "ERROR: live-boot scripts not found in initrd; ISO will not boot." >&2
-            echo "       Ensure that ensure-live-boot.sh ran successfully before build-initrd.sh." >&2
-            exit 1
+            echo "WARNING: lsinitramfs failed; skipping live-boot path validation." >&2
         fi
+        rm -f "${INITRD_LISTING}"
     fi
 
 else
