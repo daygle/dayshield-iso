@@ -12,8 +12,17 @@ on:
         required: false
         default: daygle/dayshield-core
         type: string
+      installer_ui_ref:
+        description: Installer UI ref (tag/branch/SHA). Defaults to release tag.
+        required: false
+        default: ""
+        type: string
   repository_dispatch:
     types: [build-iso-from-release]
+
+concurrency:
+  group: build-iso-${{ github.event.inputs.tag || github.event.client_payload.tag || github.run_id }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -21,10 +30,12 @@ permissions:
 jobs:
   build-and-release-iso:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       RELEASE_TAG: ${{ github.event.inputs.tag || github.event.client_payload.tag }}
       CORE_REPO: ${{ github.event.inputs.core_repo || github.event.client_payload.core_repo || 'daygle/dayshield-core' }}
+      INSTALLER_UI_REF: ${{ github.event.inputs.installer_ui_ref || github.event.client_payload.installer_ui_ref || github.event.inputs.tag || github.event.client_payload.tag }}
       ISO_NAME: dayshield-${{ github.event.inputs.tag || github.event.client_payload.tag }}.iso
     steps:
       - name: Validate inputs
@@ -36,6 +47,11 @@ jobs:
           fi
           echo "Building ISO for tag: ${RELEASE_TAG}"
           echo "Using core artifacts from: ${CORE_REPO}"
+          if [ -z "${INSTALLER_UI_REF}" ]; then
+            echo "INSTALLER_UI_REF resolved to empty value"
+            exit 1
+          fi
+          echo "Using installer UI ref: ${INSTALLER_UI_REF}"
 
       - name: Checkout ISO repository
         uses: actions/checkout@v5
@@ -45,7 +61,7 @@ jobs:
         with:
           repository: daygle/dayshield-installer-ui
           path: deps/dayshield-installer-ui
-          ref: main
+          ref: ${{ env.INSTALLER_UI_REF }}
 
       - name: Install ISO build dependencies
         run: |
@@ -80,7 +96,14 @@ jobs:
         run: |
           set -euo pipefail
           cd artifacts
-          grep "rootfs-${RELEASE_TAG}.tar.zst" checksums.txt > rootfs.sha256
+          ROOTFS_ASSET="rootfs-${RELEASE_TAG}.tar.zst"
+          awk -v file="${ROOTFS_ASSET}" '$2 == file {print $1 "  " $2}' checksums.txt > rootfs.sha256
+          if [ "$(wc -l < rootfs.sha256)" -ne 1 ]; then
+            echo "ERROR: expected exactly one checksum entry for ${ROOTFS_ASSET}" >&2
+            echo "Matching entries found:" >&2
+            awk -v file="${ROOTFS_ASSET}" '$2 == file {print}' checksums.txt >&2 || true
+            exit 1
+          fi
           sha256sum -c rootfs.sha256
           ROOTFS_SHA256="$(awk '{print $1}' rootfs.sha256)"
           echo "ROOTFS_SHA256=${ROOTFS_SHA256}" >> "$GITHUB_ENV"
