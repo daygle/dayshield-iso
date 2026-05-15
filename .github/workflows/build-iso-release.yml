@@ -35,7 +35,7 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       RELEASE_TAG: ${{ github.event.inputs.tag || github.event.client_payload.tag }}
       CORE_REPO: ${{ github.event.inputs.core_repo || github.event.client_payload.core_repo || 'daygle/dayshield-core' }}
-      INSTALLER_UI_REF: ${{ github.event.inputs.installer_ui_ref || github.event.client_payload.installer_ui_ref || github.event.inputs.tag || github.event.client_payload.tag }}
+      INSTALLER_UI_REF_REQUESTED: ${{ github.event.inputs.installer_ui_ref || github.event.client_payload.installer_ui_ref || github.event.inputs.tag || github.event.client_payload.tag }}
       ISO_NAME: dayshield-${{ github.event.inputs.tag || github.event.client_payload.tag }}.iso
     steps:
       - name: Validate inputs
@@ -47,11 +47,33 @@ jobs:
           fi
           echo "Building ISO for tag: ${RELEASE_TAG}"
           echo "Using core artifacts from: ${CORE_REPO}"
-          if [ -z "${INSTALLER_UI_REF}" ]; then
-            echo "INSTALLER_UI_REF resolved to empty value"
+          if [ -z "${INSTALLER_UI_REF_REQUESTED}" ]; then
+            echo "INSTALLER_UI_REF_REQUESTED resolved to empty value"
             exit 1
           fi
-          echo "Using installer UI ref: ${INSTALLER_UI_REF}"
+          echo "Requested installer UI ref: ${INSTALLER_UI_REF_REQUESTED}"
+
+      - name: Resolve installer UI ref
+        id: resolve_installer_ui_ref
+        run: |
+          set -euo pipefail
+          REPO_URL="https://github.com/daygle/dayshield-installer-ui.git"
+          CANDIDATE="${INSTALLER_UI_REF_REQUESTED}"
+
+          if git ls-remote --exit-code --heads "${REPO_URL}" "${CANDIDATE}" >/dev/null 2>&1 || \
+             git ls-remote --exit-code --tags "${REPO_URL}" "${CANDIDATE}" >/dev/null 2>&1; then
+            RESOLVED="${CANDIDATE}"
+            echo "Resolved installer UI ref: ${RESOLVED}"
+          elif git ls-remote --exit-code --heads "${REPO_URL}" "main" >/dev/null 2>&1; then
+            RESOLVED="main"
+            echo "WARNING: installer UI ref '${CANDIDATE}' was not found; falling back to '${RESOLVED}'"
+          else
+            echo "ERROR: installer UI ref '${CANDIDATE}' not found, and fallback branch 'main' does not exist" >&2
+            exit 1
+          fi
+
+          echo "INSTALLER_UI_REF=${RESOLVED}" >> "$GITHUB_ENV"
+          echo "installer_ui_ref=${RESOLVED}" >> "$GITHUB_OUTPUT"
 
       - name: Checkout ISO repository
         uses: actions/checkout@v5
@@ -61,7 +83,7 @@ jobs:
         with:
           repository: daygle/dayshield-installer-ui
           path: deps/dayshield-installer-ui
-          ref: ${{ env.INSTALLER_UI_REF }}
+          ref: ${{ steps.resolve_installer_ui_ref.outputs.installer_ui_ref }}
 
       - name: Install ISO build dependencies
         run: |
