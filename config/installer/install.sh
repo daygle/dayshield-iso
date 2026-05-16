@@ -501,7 +501,7 @@ else
     read -r LAN_DHCP_START LAN_DHCP_END <<< "$(calculate_lan_dhcp_pool "${LAN_CIDR}")"
 fi
 
-FINALIZE_SCRIPT="${TARGET_MOUNT}/usr/local/sbin/dayshield-installer-finalize.sh"
+FINALIZE_SCRIPT="${TARGET_MOUNT}/usr/local/lib/dayshield/installer-finalize.sh"
 [[ -x "${FINALIZE_SCRIPT}" ]] || error "Missing installer finalization helper in target rootfs: ${FINALIZE_SCRIPT}"
 
 info "Applying runtime configuration contracts via installer finalization helper …"
