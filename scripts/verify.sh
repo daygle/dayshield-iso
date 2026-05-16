@@ -18,9 +18,13 @@ OVMF_PATH=""
 # ---------------------------------------------------------------------------
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --iso)        ISO="$2"; shift 2 ;;
+        --iso)
+            [[ $# -ge 2 ]] || { echo "ERROR: --iso requires a value." >&2; exit 1; }
+            ISO="$2"; shift 2 ;;
         --qemu)       QEMU_TEST=true; shift ;;
-        --ovmf)       OVMF_PATH="$2"; shift 2 ;;
+        --ovmf)
+            [[ $# -ge 2 ]] || { echo "ERROR: --ovmf requires a value." >&2; exit 1; }
+            OVMF_PATH="$2"; shift 2 ;;
         --help|-h)
             echo "Usage: verify.sh --iso <dayshield.iso> [--qemu] [--ovmf /path/to/OVMF.fd]"
             exit 0 ;;
