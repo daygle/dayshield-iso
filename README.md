@@ -387,47 +387,24 @@ systemctl status unbound
 systemctl status nftables
 systemctl status suricata
 systemctl status crowdsec
+systemctl status ssh
+```
 
 ### Troubleshooting - updater readiness
 
-If GitHub-based updates do not work on an installed system, run these checks.
-
-#### 1. Confirm required repos exist on the installed system
-
-```sh
-test -d /opt/dayshield-core/.git && echo "core repo present" || echo "core repo missing"
-test -d /opt/dayshield-ui/.git && echo "ui repo present" || echo "ui repo missing"
-```
-
-Both should report `present`.
-
-#### 2. Confirm git is installed on the installed system
+Installed systems use the registry-based updater by default (GitHub Releases
+artifacts), not local source builds. If updates are not detected/applied,
+validate basic connectivity and settings:
 
 ```sh
-command -v git && git --version
+# DNS and outbound reachability
+getent hosts api.github.com
+curl -fsS https://api.github.com/repos/daygle/dayshield-core/releases/latest | head -c 200
 ```
 
-#### 3. Confirm each repo can reach GitHub origin
-
-```sh
-git -C /opt/dayshield-core remote -v
-git -C /opt/dayshield-ui remote -v
-git -C /opt/dayshield-core fetch --quiet origin main && echo "core fetch OK"
-git -C /opt/dayshield-ui fetch --quiet origin main && echo "ui fetch OK"
-```
-
-If fetch fails, verify DNS, gateway, and outbound firewall policy.
-
-#### 4. Common fixes
-
-- Missing `/opt/dayshield-core` or `/opt/dayshield-ui`:
-  Rebuild rootfs using Phase 4 with `CORE_REPO_DIR` and `UI_REPO_DIR`, then rebuild ISO and reinstall.
-- `git` missing:
-  Ensure you are using a rootfs built after the package-list update that includes git.
-- Wrong branch/repo URL in UI:
-  Open DayShield System -> Software Updates -> Settings and correct repo URL/branch.
-systemctl status ssh
-```
+Then review update settings in the DayShield UI/API and confirm the release
+contains `core-v*.tar.zst`, `ui-v*.tar.zst`, `rootfs-v*.tar.zst`, and
+`checksums.txt`.
 
 > **Port note:** port `8443` is the installer UI (live ISO only).
 
@@ -691,12 +668,24 @@ password authentication.
 ### Building from scratch (all three repos)
 
 ```sh
-# 1. Build the root filesystem
-( cd ../dayshield-rootfs && make rootfs )
+# 1. Build management UI assets (required by rootfs build)
+( cd ../dayshield-ui && npm install && npm run build )
 
-# 2. Build the ISO (includes installer UI)
+# 2. Build core binary and place it where rootfs expects it
+( cd ../dayshield-core && cargo build --release )
+cp ../dayshield-core/target/release/dayshield-core ../dayshield-rootfs/dayshield-core
+
+# 3. Build the root filesystem
+( cd ../dayshield-rootfs && make rootfs \
+  UI_DIR=../dayshield-ui/dist \
+  CORE_REPO_DIR=../dayshield-core \
+  UI_REPO_DIR=../dayshield-ui \
+  ROOTFS_REPO_DIR=../dayshield-rootfs )
+
+# 4. Build the ISO (includes installer UI)
 make iso \
     ROOTFS=../dayshield-rootfs/rootfs.tar.zst \
+  ROOTFS_SHA256=<sha256-of-rootfs.tar.zst> \
     INSTALLER_UI=../dayshield-installer-ui/installer-ui
 ```
 
@@ -716,18 +705,11 @@ curl -Lo ../dayshield-installer-ui/installer-ui/alpine.min.js \
 
 Always verify checksum/signature provenance before replacing bundled runtime files.
 
-### Compiled Tailwind CSS (optional)
+### Installer UI CSS notes
 
-The `styles.css` in the installer UI repo contains Tailwind source directives.
-For production, compile it first:
-
-```sh
-cd ../dayshield-installer-ui/installer-ui
-npm install -D tailwindcss
-npx tailwindcss -i styles.css -o dist/styles.css \
-    --content "index.html,app.js" --minify
-# Then update the <link> in index.html to reference dist/styles.css
-```
+No Tailwind compile step is required for installer UI integration.
+`tailwind.min.js` is bundled and processes Tailwind classes at runtime.
+`styles.css` is plain browser CSS and is copied as-is into the ISO.
 
 ---
 
