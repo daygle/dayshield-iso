@@ -193,6 +193,16 @@ echo "--- GRUB config ---"
 check "grub.cfg contains 'linux'"       grep -q 'linux\b' "${ISO_MOUNT}/boot/grub/grub.cfg"
 check "grub.cfg contains 'initrd'"      grep -q 'initrd\b' "${ISO_MOUNT}/boot/grub/grub.cfg"
 check "grub.cfg contains 'filesystem'"  grep -q 'filesystem' "${ISO_MOUNT}/boot/grub/grub.cfg"
+check "grub.cfg keeps live-config scope narrowed" \
+    grep -q 'live-config\.components=hostname' "${ISO_MOUNT}/boot/grub/grub.cfg"
+check "grub.cfg includes fsck.mode=skip noise guard" \
+    grep -q 'fsck\.mode=skip' "${ISO_MOUNT}/boot/grub/grub.cfg"
+check "grub.cfg includes UEFI local-disk fallback entry" \
+    grep -q 'menuentry "Boot from local disk (UEFI firmware)"' "${ISO_MOUNT}/boot/grub/grub.cfg"
+check "grub.cfg includes BIOS local-disk fallback entry" \
+    grep -q 'menuentry "Boot from local disk (BIOS)"' "${ISO_MOUNT}/boot/grub/grub.cfg"
+check "grub.cfg BIOS fallback tries secondary disk" \
+    grep -q 'set root=(hd1)' "${ISO_MOUNT}/boot/grub/grub.cfg"
 
 # ---------------------------------------------------------------------------
 # 4. El Torito / boot metadata

@@ -17,6 +17,9 @@ BOOT_DIR="${BUILD_DIR}/bootloader"
 GRUB_BIOS_DIR="${BOOT_DIR}/boot/grub"
 EFI_DIR="${BOOT_DIR}/EFI/BOOT"
 
+# Avoid stale artefacts between runs (e.g. .bios-boot-unavailable sentinel or
+# leftover boot_hybrid.img from a previous host capability set).
+rm -rf "${BOOT_DIR}"
 mkdir -p "${GRUB_BIOS_DIR}" "${EFI_DIR}"
 
 # ---------------------------------------------------------------------------

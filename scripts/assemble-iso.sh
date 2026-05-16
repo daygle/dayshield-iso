@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# assemble-iso.sh - Assemble the final DayShield installer ISO using xorriso.
+# assemble-iso.sh - Assemble the final DayShield Firewall installer ISO using xorriso.
 #
 # ISO layout:
 #   /boot/grub/         - GRUB configuration, modules, bios.img
@@ -48,6 +48,8 @@ missing=()
 [[ ! -f "${KERNEL_DIR}/vmlinuz" ]]                    && missing+=("kernel/vmlinuz")
 [[ ! -f "${KERNEL_DIR}/initrd.img" ]]                 && missing+=("kernel/initrd.img")
 [[ ! -f "${BOOT_DIR}/boot/grub/grub.cfg" ]]           && missing+=("bootloader/boot/grub/grub.cfg")
+[[ ! -f "${BOOT_DIR}/EFI/BOOT/BOOTX64.EFI" ]]         && missing+=("bootloader/EFI/BOOT/BOOTX64.EFI")
+[[ ! -f "${BOOT_DIR}/EFI/efiboot.img" ]]              && missing+=("bootloader/EFI/efiboot.img")
 
 if [[ ${#missing[@]} -gt 0 ]]; then
     echo "ERROR: Missing required artefacts:" >&2
