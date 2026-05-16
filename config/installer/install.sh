@@ -457,6 +457,10 @@ IPv6AcceptRA=no
 [DHCP]
 RouteMetric=10
 UseDNS=yes
+
+[DHCPv4]
+UseHostname=false
+SendHostname=false
 EOF
 
 # 20-lan.network - LAN interface with a static address.
@@ -496,6 +500,8 @@ done
 # Mask systemd-resolved; the installed system uses unbound (port 53) as its
 # DNS resolver.  Enabling both would cause a port-53 conflict on first boot.
 ln -sf /dev/null "${SYSTEMD_DIR}/systemd-resolved.service" 2>/dev/null || true
+# unbound-resolvconf expects /sbin/resolvconf, which DayShield does not ship.
+ln -sf /dev/null "${SYSTEMD_DIR}/unbound-resolvconf.service" 2>/dev/null || true
 
 # Point resolv.conf at 127.0.0.1 (unbound listening on all interfaces).
 # systemd-resolved is masked above so its stub resolver at
