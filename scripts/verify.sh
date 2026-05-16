@@ -180,8 +180,29 @@ check "squashfs /usr/lib/dayshield-installer/install.sh exists" \
     test -f "${SQ_MOUNT}/usr/lib/dayshield-installer/install.sh"
 check "squashfs /usr/lib/dayshield-installer/firstboot-run.sh exists" \
     test -f "${SQ_MOUNT}/usr/lib/dayshield-installer/firstboot-run.sh"
+check "squashfs /usr/local/sbin/dayshield-installer-finalize.sh exists" \
+    test -f "${SQ_MOUNT}/usr/local/sbin/dayshield-installer-finalize.sh"
 check "squashfs /installer-ui/index.html exists" \
     test -f "${SQ_MOUNT}/installer-ui/index.html"
+check "CLI installer invokes shared finalization helper" \
+    grep -q 'dayshield-installer-finalize\.sh' "${SQ_MOUNT}/usr/lib/dayshield-installer/install.sh"
+check "CLI installer includes DAYSHIELD media-label fallback" \
+    grep -q 'LABEL=DAYSHIELD' "${SQ_MOUNT}/usr/lib/dayshield-installer/install.sh"
+check "CLI installer checks alternate live-media squashfs paths" \
+    grep -q '/media/cdrom/live/filesystem\.squashfs' "${SQ_MOUNT}/usr/lib/dayshield-installer/install.sh"
+check "finalization helper writes admin auth store contract" \
+    grep -q '/etc/dayshield/admin\.json' "${SQ_MOUNT}/usr/local/sbin/dayshield-installer-finalize.sh"
+check "finalization helper writes core config.json contract" \
+    grep -q '/etc/dayshield/config/config\.json' "${SQ_MOUNT}/usr/local/sbin/dayshield-installer-finalize.sh"
+check "finalization helper writes nftables interface mapping contract" \
+    grep -q '/etc/dayshield/config/nft-ifaces\.conf' "${SQ_MOUNT}/usr/local/sbin/dayshield-installer-finalize.sh"
+check "finalization helper seeds DHCP contract" \
+    grep -q '/etc/dayshield/kea-dhcp4\.conf' "${SQ_MOUNT}/usr/local/sbin/dayshield-installer-finalize.sh"
+check "finalization helper seeds Unbound contract" \
+    grep -q '/etc/unbound/unbound\.conf' "${SQ_MOUNT}/usr/local/sbin/dayshield-installer-finalize.sh"
+check "firstboot consumes marker before dayshield startup" \
+    awk '/Consuming firstboot marker/{consume=NR} /systemctl start dayshield\.service/{start=NR} END{exit !(consume>0 && start>0 && consume<start)}' \
+        "${SQ_MOUNT}/usr/lib/dayshield-installer/firstboot-run.sh"
 umount "${SQ_MOUNT}" && rm -rf "${SQ_MOUNT}"
 SQ_MOUNT=""
 

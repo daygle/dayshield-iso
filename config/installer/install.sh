@@ -20,13 +20,7 @@ INSTALL_HOSTNAME=""
 INSTALL_ROOT_PASSWORD=""
 INSTALL_WAN_IFACE=""
 INSTALL_LAN_IFACE=""
-
-# Locate the squashfs on the live medium (path varies by live-boot version)
-SQUASHFS_IMG="$(find /run/live/medium/live /lib/live/mount/medium/live -name 'filesystem.squashfs' 2>/dev/null | head -n1 || true)"
-if [[ -z "${SQUASHFS_IMG}" ]] || [[ ! -f "${SQUASHFS_IMG}" ]]; then
-    echo "[ERROR] Cannot locate filesystem.squashfs on the live medium. Checked: /run/live/medium/live and /lib/live/mount/medium/live" >&2
-    exit 1
-fi
+ISO_SCAN_MOUNT=""
 
 # Redirect output to log
 exec > >(tee -a "${LOG_FILE}") 2>&1
@@ -50,8 +44,47 @@ cleanup_chroot_mounts() {
 
 cleanup_all_mounts() {
     cleanup_chroot_mounts
+    if [[ -n "${ISO_SCAN_MOUNT}" ]]; then
+        umount -lf "${ISO_SCAN_MOUNT}" 2>/dev/null || true
+        rmdir "${ISO_SCAN_MOUNT}" 2>/dev/null || true
+        ISO_SCAN_MOUNT=""
+    fi
     umount -lf "${TARGET_MOUNT}/boot/efi" 2>/dev/null || true
     umount -lf "${TARGET_MOUNT}" 2>/dev/null || true
+}
+
+find_squashfs_image() {
+    local candidate _dev _mp
+
+    for candidate in \
+        "/run/live/medium/live/filesystem.squashfs" \
+        "/lib/live/mount/medium/live/filesystem.squashfs" \
+        "/media/cdrom/live/filesystem.squashfs" \
+        "/media/live/live/filesystem.squashfs" \
+        "/run/initramfs/live/live/filesystem.squashfs"
+    do
+        if [[ -f "${candidate}" ]]; then
+            printf '%s\n' "${candidate}"
+            return 0
+        fi
+    done
+
+    # Last resort: scan block devices for DAYSHIELD media label.
+    _dev="$(blkid -t LABEL=DAYSHIELD -o device 2>/dev/null | head -n1 || true)"
+    if [[ -n "${_dev}" ]]; then
+        _mp="$(mktemp -d)"
+        if mount -o ro "${_dev}" "${_mp}" 2>/dev/null; then
+            if [[ -f "${_mp}/live/filesystem.squashfs" ]]; then
+                ISO_SCAN_MOUNT="${_mp}"
+                printf '%s\n' "${_mp}/live/filesystem.squashfs"
+                return 0
+            fi
+            umount "${_mp}" 2>/dev/null || true
+        fi
+        rmdir "${_mp}" 2>/dev/null || true
+    fi
+
+    return 1
 }
 
 configure_ssh_access() {
@@ -148,6 +181,69 @@ valid_ipv4_cidr() {
         [[ "${octet}" =~ ^([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$ ]] || return 1
     done
 }
+
+ipv4_to_int() {
+    local ip="$1"
+    local -a octets
+    IFS='.' read -r -a octets <<< "${ip}"
+    printf '%u\n' "$(( (${octets[0]} << 24) | (${octets[1]} << 16) | (${octets[2]} << 8) | ${octets[3]} ))"
+}
+
+int_to_ipv4() {
+    local value="$1"
+    printf '%d.%d.%d.%d\n' \
+        "$(( (value >> 24) & 255 ))" \
+        "$(( (value >> 16) & 255 ))" \
+        "$(( (value >> 8) & 255 ))" \
+        "$(( value & 255 ))"
+}
+
+calculate_lan_dhcp_pool() {
+    local cidr="$1"
+    local ip prefix ip_int mask network broadcast first_host last_host start end
+
+    ip="${cidr%/*}"
+    prefix="${cidr#*/}"
+    ip_int="$(ipv4_to_int "${ip}")"
+
+    if (( prefix == 32 )); then
+        mask=4294967295
+    else
+        mask=$(( (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF ))
+    fi
+
+    network=$(( ip_int & mask ))
+    broadcast=$(( network | ((~mask) & 0xFFFFFFFF) ))
+
+    if (( prefix >= 31 )); then
+        first_host="${network}"
+        last_host="${broadcast}"
+    else
+        first_host=$(( network + 1 ))
+        last_host=$(( broadcast - 1 ))
+    fi
+
+    # Prefer a .100-.199 style range where subnet size permits it.
+    start=$(( network + 100 ))
+    end=$(( network + 199 ))
+
+    if (( start < first_host || start > last_host )); then
+        start="${first_host}"
+    fi
+    if (( end > last_host )); then
+        end="${last_host}"
+    fi
+    if (( end < start )); then
+        end="${start}"
+    fi
+
+    printf '%s %s\n' "$(int_to_ipv4 "${start}")" "$(int_to_ipv4 "${end}")"
+}
+
+SQUASHFS_IMG="$(find_squashfs_image || true)"
+if [[ -z "${SQUASHFS_IMG}" ]] || [[ ! -f "${SQUASHFS_IMG}" ]]; then
+    error "Cannot locate filesystem.squashfs on the live medium. Checked live-boot/dracut paths and DAYSHIELD-labeled media."
+fi
 
 valid_root_password() {
     local password="$1"
@@ -391,24 +487,37 @@ info "Regenerating initramfs inside target …"
 chroot "${TARGET_MOUNT}" update-initramfs -u -k all
 
 # ---------------------------------------------------------------------------
-# Configure hostname and root password (while chroot bind mounts are active)
+# Configure installed system runtime contracts
 # ---------------------------------------------------------------------------
-info "Configuring hostname: ${INSTALL_HOSTNAME} …"
-echo "${INSTALL_HOSTNAME}" > "${TARGET_MOUNT}/etc/hostname"
-# Ensure /etc/hosts has a 127.0.1.1 entry for the new hostname.
-if [[ -f "${TARGET_MOUNT}/etc/hosts" ]]; then
-    if grep -Eq '^[[:space:]]*127\.0\.1\.1([[:space:]]|$)' "${TARGET_MOUNT}/etc/hosts"; then
-        sed -Ei "s|^[[:space:]]*127\\.0\\.1\\.1([[:space:]].*)?$|127.0.1.1\t${INSTALL_HOSTNAME}|" "${TARGET_MOUNT}/etc/hosts"
-    else
-        printf '127.0.1.1\t%s\n' "${INSTALL_HOSTNAME}" >> "${TARGET_MOUNT}/etc/hosts"
-    fi
+LAN_CIDR="${DAYSHIELD_LAN_CIDR:-192.168.1.1/24}"
+valid_ipv4_cidr "${LAN_CIDR}" || error "Invalid LAN CIDR '${LAN_CIDR}'. Use IPv4 CIDR format like 192.168.1.1/24."
+LAN_IP="${LAN_CIDR%/*}"
+LAN_PREFIX="${LAN_CIDR#*/}"
+
+if [[ -n "${DAYSHIELD_LAN_DHCP_START:-}" && -n "${DAYSHIELD_LAN_DHCP_END:-}" ]]; then
+    LAN_DHCP_START="${DAYSHIELD_LAN_DHCP_START}"
+    LAN_DHCP_END="${DAYSHIELD_LAN_DHCP_END}"
 else
-    printf '127.0.0.1\tlocalhost\n127.0.1.1\t%s\n' "${INSTALL_HOSTNAME}" \
-        > "${TARGET_MOUNT}/etc/hosts"
+    read -r LAN_DHCP_START LAN_DHCP_END <<< "$(calculate_lan_dhcp_pool "${LAN_CIDR}")"
 fi
 
-info "Configuring root password …"
-printf 'root:%s\n' "${INSTALL_ROOT_PASSWORD}" | chroot "${TARGET_MOUNT}" chpasswd
+FINALIZE_SCRIPT="${TARGET_MOUNT}/usr/local/sbin/dayshield-installer-finalize.sh"
+[[ -x "${FINALIZE_SCRIPT}" ]] || error "Missing installer finalization helper in target rootfs: ${FINALIZE_SCRIPT}"
+
+info "Applying runtime configuration contracts via installer finalization helper …"
+"${FINALIZE_SCRIPT}" \
+    "${TARGET_MOUNT}" \
+    "${INSTALL_HOSTNAME}" \
+    "${INSTALL_ROOT_PASSWORD}" \
+    "${INSTALL_WAN_IFACE}" \
+    "dhcp" \
+    "" \
+    "" \
+    "${INSTALL_LAN_IFACE}" \
+    "${LAN_IP}" \
+    "${LAN_PREFIX}" \
+    "${LAN_DHCP_START}" \
+    "${LAN_DHCP_END}"
 unset INSTALL_ROOT_PASSWORD
 
 cleanup_chroot_mounts
@@ -435,47 +544,6 @@ tmpfs              /tmp       tmpfs defaults           0  0
 EOF
 
 # ---------------------------------------------------------------------------
-# Network configuration
-# ---------------------------------------------------------------------------
-info "Writing network configuration …"
-NETWORK_DIR="${TARGET_MOUNT}/etc/systemd/network"
-mkdir -p "${NETWORK_DIR}"
-LAN_CIDR="${DAYSHIELD_LAN_CIDR:-192.168.1.1/24}"
-valid_ipv4_cidr "${LAN_CIDR}" || error "Invalid LAN CIDR '${LAN_CIDR}'. Use IPv4 CIDR format like 192.168.1.1/24."
-
-# 10-wan.network - WAN interface with DHCP.
-cat > "${NETWORK_DIR}/10-wan.network" <<EOF
-# 10-wan.network - Generated by DayShield installer.
-# WAN interface: DHCP on the primary outbound ethernet port.
-[Match]
-Name=${INSTALL_WAN_IFACE}
-
-[Network]
-DHCP=yes
-IPv6AcceptRA=no
-
-[DHCP]
-RouteMetric=10
-UseDNS=yes
-
-[DHCPv4]
-UseHostname=false
-SendHostname=false
-EOF
-
-# 20-lan.network - LAN interface with a static address.
-cat > "${NETWORK_DIR}/20-lan.network" <<EOF
-# 20-lan.network - Generated by DayShield installer.
-# LAN interface: static address on the primary inbound ethernet port.
-[Match]
-Name=${INSTALL_LAN_IFACE}
-
-[Network]
-Address=${LAN_CIDR}
-IPv6AcceptRA=no
-EOF
-info "Network configuration written for WAN=${INSTALL_WAN_IFACE} and LAN=${INSTALL_LAN_IFACE}."
-
 # Enable systemd-networkd on the target by creating the
 # required symlinks directly.  Pseudo-filesystem bind mounts were torn down
 # above (after update-initramfs), so chroot + systemctl is not available at

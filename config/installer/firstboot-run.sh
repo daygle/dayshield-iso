@@ -24,7 +24,11 @@ fi
 exec >> "${LOG_FILE}" 2>&1
 
 echo "==> DayShield first-boot initialisation: $(date -u)"
-FAILED=0
+
+# Consume the marker immediately so repeated boot attempts do not regenerate
+# machine identity if a later step fails.
+echo "--> Consuming firstboot marker …"
+rm -f "${FIRSTBOOT_MARKER}"
 
 # ---------------------------------------------------------------------------
 # 1. SSH host keys
@@ -33,7 +37,7 @@ echo "--> Regenerating SSH host keys …"
 rm -f /etc/ssh/ssh_host_*
 if ! ssh-keygen -A; then
     echo "[ERROR] Failed to regenerate SSH host keys."
-    FAILED=1
+    exit 1
 fi
 
 # ---------------------------------------------------------------------------
@@ -78,16 +82,5 @@ systemctl start dayshield.service || {
     echo "[ERROR] Failed to start dayshield.service" >&2
     exit 1
 }
-
-# ---------------------------------------------------------------------------
-# 6. Remove firstboot marker
-# ---------------------------------------------------------------------------
-if [[ ${FAILED} -eq 0 ]]; then
-    echo "--> Removing firstboot marker …"
-    rm -f "${FIRSTBOOT_MARKER}"
-else
-    echo "--> First-boot encountered errors; keeping marker for retry."
-    exit 1
-fi
 
 echo "==> First-boot initialisation complete: $(date -u)"
