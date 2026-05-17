@@ -542,7 +542,8 @@ The build pipeline enforces deterministic output:
 - `mksquashfs` is called with `-mkfs-time 0`, `-no-fragments`, `-all-root`.
 - `xorriso` attempts to use `-set_all_file_dates 0` when supported. If the installed
   xorriso version does not support that option, the ISO is still assembled without it.
-- IPv6 is disabled (`ipv6.disable=1`) in all kernel command lines.
+- IPv6 is disabled by DayShield's default sysctl/config, not by kernel command lines,
+  so the installed system can enable it at runtime.
 
 > **Note on network access during build:** The pipeline is offline by default when
 > the input rootfs already contains `live-boot`/`live-config` and a kernel.  Two
@@ -768,6 +769,6 @@ For deeper details, see:
 | GRUB over systemd-boot | GRUB provides both BIOS and UEFI support from a single binary set; systemd-boot is UEFI-only |
 | zstd compression for squashfs | Best compression ratio vs. decompression speed for live boots |
 | Epoch-0 timestamps | Required for reproducible builds; matches Debian's `SOURCE_DATE_EPOCH` convention |
-| No IPv6 | `ipv6.disable=1` kernel parameter + dracut `omit_dracutmodules+=" ipv6 "` |
+| IPv6 default-off | Disabled by default in DayShield sysctl/config; kernel IPv6 remains available for the global runtime toggle |
 | GPT partitioning | Required for UEFI; also supported by modern BIOS-boot GRUB |
 | ext4 root filesystem | Best compatibility with the Debian-based rootfs |

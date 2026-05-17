@@ -125,7 +125,7 @@ if [[ "${USE_DRACUT}" == "1" ]] && command -v dracut &>/dev/null && [[ -n "${DRA
 # systemd-networkd in the live environment.
 add_dracutmodules+=" systemd base rootfs-block "
 add_drivers+=" ext4 xfs btrfs squashfs loop "
-omit_dracutmodules+=" ipv6 bluetooth iscsi "
+omit_dracutmodules+=" bluetooth iscsi "
 compress="zstd"
 EOF
 
