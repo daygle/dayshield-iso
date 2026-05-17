@@ -57,12 +57,60 @@ mkdir -p "${TARGET}/boot/efi/EFI/BOOT"
 cp "${TARGET}/boot/efi/EFI/dayshield/grubx64.efi" \
    "${TARGET}/boot/efi/EFI/BOOT/BOOTX64.EFI"
 
+find_latest_boot_file() {
+    local dir="$1" prefix="$2" exact="$3" candidate=""
+    if [[ -e "${dir}/${exact}" ]]; then
+        printf '%s\n' "${dir}/${exact}"
+        return 0
+    fi
+    candidate="$(find "${dir}" -maxdepth 1 -name "${prefix}*" | sort | tail -n1)"
+    [[ -n "${candidate}" ]] || return 1
+    printf '%s\n' "${candidate}"
+}
+
+install_slot_boot_files() {
+    local slot="$1" source_boot="$2" dest="${TARGET}/boot/dayshield/slot-${slot}"
+    local kernel initrd
+    kernel="$(find_latest_boot_file "${source_boot}" "vmlinuz-" "vmlinuz")"
+    initrd="$(find_latest_boot_file "${source_boot}" "initrd.img-" "initrd.img")"
+    mkdir -p "${dest}"
+    cp "${kernel}" "${dest}/vmlinuz"
+    cp "${initrd}" "${dest}/initrd.img"
+}
+
+BOOT_UUID="$(blkid -s UUID -o value "$(blkid -L DAYSHIELD_BOOT)")"
+ROOT_A_UUID="$(blkid -s UUID -o value "$(blkid -L DAYSHIELD_ROOT_A)")"
+ROOT_B_UUID="$(blkid -s UUID -o value "$(blkid -L DAYSHIELD_ROOT_B)")"
+
+echo "--> Installing DayShield A/B boot entries ..."
+install_slot_boot_files "a" "${TARGET}/boot"
+mkdir -p "${TARGET}/boot/dayshield/slot-b"
+cat > "${TARGET}/etc/grub.d/09_dayshield_ab" <<EOF
+#!/bin/sh
+set -e
+cat <<'GRUB_EOF'
+menuentry 'DayShield slot A' --id 'dayshield-a' {
+    search --no-floppy --fs-uuid --set=root ${BOOT_UUID}
+    linux /dayshield/slot-a/vmlinuz root=UUID=${ROOT_A_UUID} ro quiet splash
+    initrd /dayshield/slot-a/initrd.img
+}
+
+menuentry 'DayShield slot B' --id 'dayshield-b' {
+    search --no-floppy --fs-uuid --set=root ${BOOT_UUID}
+    linux /dayshield/slot-b/vmlinuz root=UUID=${ROOT_B_UUID} ro quiet splash
+    initrd /dayshield/slot-b/initrd.img
+}
+GRUB_EOF
+EOF
+chmod 755 "${TARGET}/etc/grub.d/09_dayshield_ab"
+
 # ---------------------------------------------------------------------------
 # Write GRUB default configuration
 # ---------------------------------------------------------------------------
 echo "--> Writing /etc/default/grub …"
 cat > "${TARGET}/etc/default/grub" <<'EOF'
-GRUB_DEFAULT=0
+GRUB_DEFAULT=saved
+GRUB_SAVEDEFAULT=false
 GRUB_TIMEOUT=5
 GRUB_DISTRIBUTOR="DayShield"
 GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
