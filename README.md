@@ -165,7 +165,7 @@ All checks should exit `[PASS]`.  The script validates:
 - Required directories present
 - All systemd service units installed and enabled
 - `dayshield-core` binary installed and executable
-- IPv6 disabled (sysctl, module blacklist, `/etc/hosts`, nftables, unbound)
+- IPv6 default-off (sysctl, `/etc/hosts`, nftables, unbound) — kernel module kept available for runtime toggle
 - nftables, unbound, suricata, and crowdsec configs present
 
 ---
