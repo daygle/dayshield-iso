@@ -1,7 +1,7 @@
-﻿# DayShield ISO
+﻿# DayShield Firewall ISO
 
 Deterministic, reproducible hybrid BIOS+UEFI bootable installer ISO for the
-**DayShield Firewall OS**.
+**DayShield Firewall**.
 
 Takes the output of [dayshield-rootfs](https://github.com/daygle/dayshield-rootfs)
 (`rootfs.tar.zst`) and produces a deterministic hybrid BIOS+UEFI installer `.iso`
