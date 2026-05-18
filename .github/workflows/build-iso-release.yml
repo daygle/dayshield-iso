@@ -4,16 +4,28 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to build from (for example v1.0.1)
+        description: |
+          ISO release tag (e.g. iso-v1.0.3). This becomes the GitHub Release tag
+          for the ISO artifact and is independent of any component version tag.
         required: true
         type: string
-      core_repo:
-        description: Core repository that hosts release artifacts
+      rootfs_repo:
+        description: |
+          Repository containing the rootfs release artifact
+          (default: daygle/dayshield-rootfs). Each component is released
+          independently, so the rootfs repo has its own version tags.
         required: false
-        default: daygle/dayshield-core
+        default: daygle/dayshield-rootfs
+        type: string
+      rootfs_ref:
+        description: |
+          Rootfs release tag to fetch (e.g. v2.1.0). This is the independent
+          version tag from the rootfs repo and does not need to match the ISO tag
+          or any other component version.
+        required: true
         type: string
       installer_ui_ref:
-        description: Installer UI ref (tag/branch/SHA). Defaults to release tag.
+        description: Installer UI ref (tag/branch/SHA). Defaults to main if not set.
         required: false
         default: ""
         type: string
@@ -34,8 +46,9 @@ jobs:
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
       RELEASE_TAG: ${{ github.event.inputs.tag || github.event.client_payload.tag }}
-      CORE_REPO: ${{ github.event.inputs.core_repo || github.event.client_payload.core_repo || 'daygle/dayshield-core' }}
-      INSTALLER_UI_REF_REQUESTED: ${{ github.event.inputs.installer_ui_ref || github.event.client_payload.installer_ui_ref || github.event.inputs.tag || github.event.client_payload.tag }}
+      ROOTFS_REPO: ${{ github.event.inputs.rootfs_repo || github.event.client_payload.rootfs_repo || 'daygle/dayshield-rootfs' }}
+      ROOTFS_REF: ${{ github.event.inputs.rootfs_ref || github.event.client_payload.rootfs_ref }}
+      INSTALLER_UI_REF_REQUESTED: ${{ github.event.inputs.installer_ui_ref || github.event.client_payload.installer_ui_ref || '' }}
       ISO_NAME: dayshield-${{ github.event.inputs.tag || github.event.client_payload.tag }}.iso
     steps:
       - name: Validate inputs
@@ -45,13 +58,14 @@ jobs:
             echo "RELEASE_TAG is required"
             exit 1
           fi
-          echo "Building ISO for tag: ${RELEASE_TAG}"
-          echo "Using core artifacts from: ${CORE_REPO}"
-          if [ -z "${INSTALLER_UI_REF_REQUESTED}" ]; then
-            echo "INSTALLER_UI_REF_REQUESTED resolved to empty value"
+          if [ -z "${ROOTFS_REF}" ]; then
+            echo "rootfs_ref is required — specify the independent rootfs version tag (e.g. v2.1.0)"
             exit 1
           fi
-          echo "Requested installer UI ref: ${INSTALLER_UI_REF_REQUESTED}"
+          echo "Building ISO tag:    ${RELEASE_TAG}"
+          echo "Rootfs repo:         ${ROOTFS_REPO}"
+          echo "Rootfs ref:          ${ROOTFS_REF}"
+          echo "Installer UI ref:    ${INSTALLER_UI_REF_REQUESTED:-<default: main>}"
 
       - name: Resolve installer UI ref
         id: resolve_installer_ui_ref
@@ -59,6 +73,11 @@ jobs:
           set -euo pipefail
           REPO_URL="https://github.com/daygle/dayshield-installer-ui.git"
           CANDIDATE="${INSTALLER_UI_REF_REQUESTED}"
+
+          # If no installer UI ref was requested, default to main
+          if [ -z "${CANDIDATE}" ]; then
+            CANDIDATE="main"
+          fi
 
           if git ls-remote --exit-code --heads "${REPO_URL}" "${CANDIDATE}" >/dev/null 2>&1 || \
              git ls-remote --exit-code --tags "${REPO_URL}" "${CANDIDATE}" >/dev/null 2>&1; then
@@ -96,29 +115,32 @@ jobs:
 
       - name: Download rootfs artifact and checksums
         env:
-          GH_TOKEN: ${{ secrets.CORE_REPO_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.ROOTFS_REPO_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          ROOTFS_ASSET="rootfs-${RELEASE_TAG}.tar.zst"
-          gh release download "${RELEASE_TAG}" \
-            --repo "${CORE_REPO}" \
+          # Rootfs is versioned independently in its own repo.
+          # ROOTFS_REF is the rootfs-specific tag (e.g. v2.1.0), which is
+          # independent of the ISO tag or any other component version.
+          ROOTFS_ASSET="rootfs-${ROOTFS_REF}.tar.zst"
+          gh release download "${ROOTFS_REF}" \
+            --repo "${ROOTFS_REPO}" \
             --pattern "${ROOTFS_ASSET}" \
             --pattern "checksums.txt" \
             --dir artifacts
           if [ ! -f "artifacts/${ROOTFS_ASSET}" ]; then
-            echo "ERROR: missing release asset ${ROOTFS_ASSET} in ${CORE_REPO}@${RELEASE_TAG}" >&2
+            echo "ERROR: missing release asset ${ROOTFS_ASSET} in ${ROOTFS_REPO}@${ROOTFS_REF}" >&2
             echo "Available assets:" >&2
-            gh release view "${RELEASE_TAG}" --repo "${CORE_REPO}" --json assets --jq '.assets[].name' >&2 || true
+            gh release view "${ROOTFS_REF}" --repo "${ROOTFS_REPO}" --json assets --jq '.assets[].name' >&2 || true
             exit 1
           fi
+          echo "ROOTFS_ASSET=${ROOTFS_ASSET}" >> "$GITHUB_ENV"
           ls -lh artifacts
 
       - name: Verify rootfs checksum
         run: |
           set -euo pipefail
           cd artifacts
-          ROOTFS_ASSET="rootfs-${RELEASE_TAG}.tar.zst"
           awk -v file="${ROOTFS_ASSET}" '$2 == file {print $1 "  " $2}' checksums.txt > rootfs.sha256
           if [ "$(wc -l < rootfs.sha256)" -ne 1 ]; then
             echo "ERROR: expected exactly one checksum entry for ${ROOTFS_ASSET}" >&2
@@ -136,7 +158,7 @@ jobs:
           set -euo pipefail
           sudo make clean
           sudo ALLOW_NETWORK_FETCH=1 make iso \
-            ROOTFS="artifacts/rootfs-${RELEASE_TAG}.tar.zst" \
+            ROOTFS="artifacts/${ROOTFS_ASSET}" \
             ROOTFS_SHA256="${ROOTFS_SHA256}" \
             INSTALLER_UI="deps/dayshield-installer-ui/installer-ui" \
             OUTPUT="${ISO_NAME}"
