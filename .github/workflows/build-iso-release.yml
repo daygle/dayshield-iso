@@ -53,11 +53,12 @@ on:
         description: |
           Rootfs release tag to fetch (e.g. v2.1.0). This is the independent
           version tag from the rootfs repo and does not need to match the ISO tag
-          or any other component version.
-        required: true
+          or any other component version. Leave empty to auto-resolve latest stable release.
+        required: false
+        default: ""
         type: string
       installer_ui_ref:
-        description: Installer UI ref (tag/branch/SHA). Defaults to main if not set.
+        description: Installer UI ref (tag/branch/SHA). Leave empty to auto-resolve latest stable release tag (fallback: main).
         required: false
         default: ""
         type: string
@@ -89,25 +90,20 @@ jobs:
         # For tag-push builds the rootfs ref and other inputs are read from
         # release-inputs.env (committed to this repo).  workflow_dispatch and
         # repository_dispatch callers supply the inputs directly.
+        env:
+          GH_TOKEN: ${{ secrets.ROOTFS_REPO_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" = "push" ]; then
             # Tag push: derive the release tag from the git ref.
             RELEASE_TAG="${{ github.ref_name }}"
 
-            # Read pinned build inputs from release-inputs.env.
-            if [ ! -f release-inputs.env ]; then
-              echo "ERROR: release-inputs.env not found." >&2
-              echo "Create release-inputs.env in the repo root and set ROOTFS_REF before pushing an ISO version tag." >&2
-              exit 1
-            fi
-            # shellcheck source=release-inputs.env
-            source release-inputs.env
-
-            if [ -z "${ROOTFS_REF:-}" ]; then
-              echo "ERROR: ROOTFS_REF is not set in release-inputs.env." >&2
-              echo "Update release-inputs.env with the target rootfs version tag before pushing the ISO tag." >&2
-              exit 1
+            # Read optional pinned build inputs from release-inputs.env.
+            if [ -f release-inputs.env ]; then
+              # shellcheck source=release-inputs.env
+              source release-inputs.env
+            else
+              echo "WARNING: release-inputs.env not found; using automatic defaults."
             fi
 
             ROOTFS_REPO="${ROOTFS_REPO:-daygle/dayshield-rootfs}"
@@ -116,19 +112,12 @@ jobs:
             # Tag create (for tags created in GitHub UI/API): derive tag from create payload.
             RELEASE_TAG="${{ github.event.ref }}"
 
-            # Read pinned build inputs from release-inputs.env.
-            if [ ! -f release-inputs.env ]; then
-              echo "ERROR: release-inputs.env not found." >&2
-              echo "Create release-inputs.env in the repo root and set ROOTFS_REF before creating an ISO version tag." >&2
-              exit 1
-            fi
-            # shellcheck source=release-inputs.env
-            source release-inputs.env
-
-            if [ -z "${ROOTFS_REF:-}" ]; then
-              echo "ERROR: ROOTFS_REF is not set in release-inputs.env." >&2
-              echo "Update release-inputs.env with the target rootfs version tag before pushing the ISO tag." >&2
-              exit 1
+            # Read optional pinned build inputs from release-inputs.env.
+            if [ -f release-inputs.env ]; then
+              # shellcheck source=release-inputs.env
+              source release-inputs.env
+            else
+              echo "WARNING: release-inputs.env not found; using automatic defaults."
             fi
 
             ROOTFS_REPO="${ROOTFS_REPO:-daygle/dayshield-rootfs}"
@@ -139,6 +128,16 @@ jobs:
             ROOTFS_REF="${{ github.event.inputs.rootfs_ref || github.event.client_payload.rootfs_ref }}"
             ROOTFS_REPO="${{ github.event.inputs.rootfs_repo || github.event.client_payload.rootfs_repo || 'daygle/dayshield-rootfs' }}"
             INSTALLER_UI_REF_REQUESTED="${{ github.event.inputs.installer_ui_ref || github.event.client_payload.installer_ui_ref || '' }}"
+          fi
+
+          # Auto-resolve latest stable rootfs release when no explicit ref is provided.
+          if [ -z "${ROOTFS_REF:-}" ]; then
+            echo "ROOTFS_REF not provided; resolving latest stable release from ${ROOTFS_REPO}"
+            ROOTFS_REF="$(gh release list --repo "${ROOTFS_REPO}" --limit 1 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[0].tagName')"
+            if [ -z "${ROOTFS_REF}" ] || [ "${ROOTFS_REF}" = "null" ]; then
+              echo "ERROR: unable to resolve latest stable rootfs release tag from ${ROOTFS_REPO}" >&2
+              exit 1
+            fi
           fi
 
           echo "RELEASE_TAG=${RELEASE_TAG}"                               >> "$GITHUB_ENV"
@@ -155,28 +154,36 @@ jobs:
             exit 1
           fi
           if [ -z "${ROOTFS_REF}" ]; then
-            echo "rootfs_ref is required — specify the independent rootfs version tag (e.g. v2.1.0)"
+            echo "Unable to determine rootfs_ref automatically and none was provided"
             exit 1
           fi
           echo "Building ISO tag:    ${RELEASE_TAG}"
           echo "Rootfs repo:         ${ROOTFS_REPO}"
           echo "Rootfs ref:          ${ROOTFS_REF}"
-          echo "Installer UI ref:    ${INSTALLER_UI_REF_REQUESTED:-<default: main>}"
+          echo "Installer UI ref:    ${INSTALLER_UI_REF_REQUESTED:-<auto: latest stable release, fallback main>}"
 
       - name: Resolve installer UI ref
         id: resolve_installer_ui_ref
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          REPO="daygle/dayshield-installer-ui"
           REPO_URL="https://github.com/daygle/dayshield-installer-ui.git"
           CANDIDATE="${INSTALLER_UI_REF_REQUESTED}"
 
-          # If no installer UI ref was requested, default to main
+          # If no installer UI ref was requested, auto-resolve latest stable
+          # release tag; fallback to main if none is available.
           if [ -z "${CANDIDATE}" ]; then
-            CANDIDATE="main"
-          fi
-
-          if git ls-remote --exit-code --heads "${REPO_URL}" "${CANDIDATE}" >/dev/null 2>&1 || \
-             git ls-remote --exit-code --tags "${REPO_URL}" "${CANDIDATE}" >/dev/null 2>&1; then
+            RESOLVED="$(gh release list --repo "${REPO}" --limit 1 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[0].tagName')"
+            if [ -n "${RESOLVED}" ] && [ "${RESOLVED}" != "null" ]; then
+              echo "Auto-resolved installer UI release tag: ${RESOLVED}"
+            else
+              RESOLVED="main"
+              echo "WARNING: no stable installer UI release found; falling back to '${RESOLVED}'"
+            fi
+          elif git ls-remote --exit-code --heads "${REPO_URL}" "${CANDIDATE}" >/dev/null 2>&1 || \
+               git ls-remote --exit-code --tags "${REPO_URL}" "${CANDIDATE}" >/dev/null 2>&1; then
             RESOLVED="${CANDIDATE}"
             echo "Resolved installer UI ref: ${RESOLVED}"
           elif git ls-remote --exit-code --heads "${REPO_URL}" "main" >/dev/null 2>&1; then
