@@ -58,7 +58,9 @@ on:
         default: ""
         type: string
       installer_ui_ref:
-        description: Installer UI ref (tag/branch/SHA). Leave empty to auto-resolve latest stable release tag (fallback: main).
+        description: |
+          Installer UI ref (tag/branch/SHA).
+          Leave empty to auto-resolve latest stable release tag (fallback: main).
         required: false
         default: ""
         type: string
