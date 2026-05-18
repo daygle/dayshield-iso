@@ -189,7 +189,7 @@ check "squashfs /usr/local/lib/dayshield/installer-finalize.sh exists" \
 check "squashfs /installer-ui/index.html exists" \
     test -f "${SQ_MOUNT}/installer-ui/index.html"
 check "CLI installer invokes shared finalization helper" \
-    grep -q 'dayshield-installer-finalize\.sh' "${SQ_MOUNT}/usr/lib/dayshield-installer/install.sh"
+    grep -q '/usr/local/lib/dayshield/installer-finalize\.sh' "${SQ_MOUNT}/usr/lib/dayshield-installer/install.sh"
 check "CLI installer includes DAYSHIELD media-label fallback" \
     grep -q 'LABEL=DAYSHIELD' "${SQ_MOUNT}/usr/lib/dayshield-installer/install.sh"
 check "CLI installer checks alternate live-media squashfs paths" \

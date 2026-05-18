@@ -22,6 +22,7 @@ INSTALL_WAN_IFACE=""
 INSTALL_LAN_IFACE=""
 INSTALL_MODE="${DAYSHIELD_INSTALL_MODE:-}"
 ISO_SCAN_MOUNT=""
+ROOT_B_MOUNT=""
 
 # Redirect output to log
 exec > >(tee -a "${LOG_FILE}") 2>&1
@@ -49,6 +50,11 @@ cleanup_all_mounts() {
         umount -lf "${ISO_SCAN_MOUNT}" 2>/dev/null || true
         rmdir "${ISO_SCAN_MOUNT}" 2>/dev/null || true
         ISO_SCAN_MOUNT=""
+    fi
+    if [[ -n "${ROOT_B_MOUNT}" ]]; then
+        umount -lf "${ROOT_B_MOUNT}" 2>/dev/null || true
+        rmdir "${ROOT_B_MOUNT}" 2>/dev/null || true
+        ROOT_B_MOUNT=""
     fi
     umount -lf "${TARGET_MOUNT}/boot/efi" 2>/dev/null || true
     umount -lf "${TARGET_MOUNT}" 2>/dev/null || true
@@ -183,6 +189,17 @@ valid_ipv4_cidr() {
     done
 }
 
+valid_ipv4() {
+    local ip="$1" octet
+    local -a octets
+
+    IFS='.' read -r -a octets <<< "${ip}"
+    [[ ${#octets[@]} -eq 4 ]] || return 1
+    for octet in "${octets[@]}"; do
+        [[ "${octet}" =~ ^([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$ ]] || return 1
+    done
+}
+
 ipv4_to_int() {
     local ip="$1"
     local -a octets
@@ -239,6 +256,79 @@ calculate_lan_dhcp_pool() {
     fi
 
     printf '%s %s\n' "$(int_to_ipv4 "${start}")" "$(int_to_ipv4 "${end}")"
+}
+
+validate_lan_runtime_config() {
+    local lan_int start_int end_int mask network start_network end_network
+
+    LAN_CIDR="${DAYSHIELD_LAN_CIDR:-192.168.1.1/24}"
+    valid_ipv4_cidr "${LAN_CIDR}" || \
+        error "Invalid LAN CIDR '${LAN_CIDR}'. Use IPv4 CIDR format like 192.168.1.1/24."
+
+    LAN_IP="${LAN_CIDR%/*}"
+    LAN_PREFIX="${LAN_CIDR#*/}"
+
+    if [[ -n "${DAYSHIELD_LAN_DHCP_START:-}" || -n "${DAYSHIELD_LAN_DHCP_END:-}" ]]; then
+        [[ -n "${DAYSHIELD_LAN_DHCP_START:-}" && -n "${DAYSHIELD_LAN_DHCP_END:-}" ]] || \
+            error "Set both DAYSHIELD_LAN_DHCP_START and DAYSHIELD_LAN_DHCP_END, or neither."
+        valid_ipv4 "${DAYSHIELD_LAN_DHCP_START}" || \
+            error "Invalid DHCP start address '${DAYSHIELD_LAN_DHCP_START}'."
+        valid_ipv4 "${DAYSHIELD_LAN_DHCP_END}" || \
+            error "Invalid DHCP end address '${DAYSHIELD_LAN_DHCP_END}'."
+        LAN_DHCP_START="${DAYSHIELD_LAN_DHCP_START}"
+        LAN_DHCP_END="${DAYSHIELD_LAN_DHCP_END}"
+    else
+        read -r LAN_DHCP_START LAN_DHCP_END <<< "$(calculate_lan_dhcp_pool "${LAN_CIDR}")"
+    fi
+
+    lan_int="$(ipv4_to_int "${LAN_IP}")"
+    start_int="$(ipv4_to_int "${LAN_DHCP_START}")"
+    end_int="$(ipv4_to_int "${LAN_DHCP_END}")"
+
+    (( start_int <= end_int )) || \
+        error "Invalid DHCP range: ${LAN_DHCP_START} must be less than or equal to ${LAN_DHCP_END}."
+
+    if (( LAN_PREFIX == 32 )); then
+        mask=4294967295
+    else
+        mask=$(( (0xFFFFFFFF << (32 - LAN_PREFIX)) & 0xFFFFFFFF ))
+    fi
+
+    network=$(( lan_int & mask ))
+    start_network=$(( start_int & mask ))
+    end_network=$(( end_int & mask ))
+
+    (( start_network == network && end_network == network )) || \
+        error "DHCP range ${LAN_DHCP_START}-${LAN_DHCP_END} must be inside LAN subnet ${LAN_CIDR}."
+    (( lan_int < start_int || lan_int > end_int )) || \
+        error "DHCP range must not include the LAN gateway address ${LAN_IP}."
+}
+
+seed_inactive_root_slot() {
+    local root_b_uuid
+
+    ROOT_B_MOUNT="$(mktemp -d)"
+    mount "${ROOT_B_PART}" "${ROOT_B_MOUNT}"
+
+    info "Seeding root slot B from configured slot A ..."
+    tar -C "${TARGET_MOUNT}" --one-file-system -cpf - . | tar -C "${ROOT_B_MOUNT}" -xpf -
+
+    mkdir -p \
+        "${ROOT_B_MOUNT}/boot" \
+        "${ROOT_B_MOUNT}/dev" \
+        "${ROOT_B_MOUNT}/proc" \
+        "${ROOT_B_MOUNT}/sys" \
+        "${ROOT_B_MOUNT}/run" \
+        "${ROOT_B_MOUNT}/etc/dayshield"
+
+    root_b_uuid="$(blkid -s UUID -o value "${ROOT_B_PART}")"
+    sed -i "s/UUID=${ROOT_UUID}  \\/ /UUID=${root_b_uuid}  \\/ /" "${ROOT_B_MOUNT}/etc/fstab"
+    printf 'b\n' > "${ROOT_B_MOUNT}/etc/dayshield/rootfs-slot"
+
+    sync
+    umount "${ROOT_B_MOUNT}"
+    rmdir "${ROOT_B_MOUNT}"
+    ROOT_B_MOUNT=""
 }
 
 SQUASHFS_IMG="$(find_squashfs_image || true)"
@@ -467,10 +557,12 @@ if [[ "${DAYSHIELD_UNATTENDED:-}" != "1" ]]; then
 fi
 
 collect_install_configuration
+validate_lan_runtime_config
 info "Install configuration:"
 info "  hostname : ${INSTALL_HOSTNAME}"
 info "  WAN iface: ${INSTALL_WAN_IFACE}"
 info "  LAN iface: ${INSTALL_LAN_IFACE}"
+info "  LAN CIDR : ${LAN_CIDR}"
 
 # ---------------------------------------------------------------------------
 # Partition
@@ -554,21 +646,6 @@ rm -rf \
 # Regenerate a clean initramfs without live-boot hooks
 info "Regenerating initramfs inside target …"
 chroot "${TARGET_MOUNT}" update-initramfs -u -k all
-
-# ---------------------------------------------------------------------------
-# Configure installed system runtime contracts
-# ---------------------------------------------------------------------------
-LAN_CIDR="${DAYSHIELD_LAN_CIDR:-192.168.1.1/24}"
-valid_ipv4_cidr "${LAN_CIDR}" || error "Invalid LAN CIDR '${LAN_CIDR}'. Use IPv4 CIDR format like 192.168.1.1/24."
-LAN_IP="${LAN_CIDR%/*}"
-LAN_PREFIX="${LAN_CIDR#*/}"
-
-if [[ -n "${DAYSHIELD_LAN_DHCP_START:-}" && -n "${DAYSHIELD_LAN_DHCP_END:-}" ]]; then
-    LAN_DHCP_START="${DAYSHIELD_LAN_DHCP_START}"
-    LAN_DHCP_END="${DAYSHIELD_LAN_DHCP_END}"
-else
-    read -r LAN_DHCP_START LAN_DHCP_END <<< "$(calculate_lan_dhcp_pool "${LAN_CIDR}")"
-fi
 
 FINALIZE_SCRIPT="${TARGET_MOUNT}/usr/local/lib/dayshield/installer-finalize.sh"
 [[ -x "${FINALIZE_SCRIPT}" ]] || error "Missing installer finalization helper in target rootfs: ${FINALIZE_SCRIPT}"
@@ -674,6 +751,8 @@ install -m 644 "${INSTALLER_DIR}/firstboot.service" \
     "${SYSTEMD_DIR}/firstboot.service"
 ln -sf "/etc/systemd/system/firstboot.service" \
     "${SYSTEMD_DIR}/multi-user.target.wants/firstboot.service"
+
+seed_inactive_root_slot
 
 # ---------------------------------------------------------------------------
 # Unmount

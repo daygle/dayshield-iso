@@ -84,7 +84,7 @@ ROOT_B_UUID="$(blkid -s UUID -o value "$(blkid -L DAYSHIELD_ROOT_B)")"
 
 echo "--> Installing DayShield A/B boot entries ..."
 install_slot_boot_files "a" "${TARGET}/boot"
-mkdir -p "${TARGET}/boot/dayshield/slot-b"
+install_slot_boot_files "b" "${TARGET}/boot"
 cat > "${TARGET}/etc/grub.d/09_dayshield_ab" <<EOF
 #!/bin/sh
 set -e
