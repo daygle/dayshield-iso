@@ -10,8 +10,9 @@ name: Build and Release ISO
 #
 # Trigger options
 # ---------------
-# 1. Tag push (automated)
-#    Push an iso-v* tag (e.g. iso-v1.0.3) to this repository.
+# 1. Tag push/create (automated)
+#    Push or create an iso-v* tag (e.g. iso-v1.0.3) or v* tag (e.g. v1.0.3)
+#    in this repository.
 #    Before pushing the tag, update `release-inputs.env` in this repo to pin
 #    the desired rootfs ref (and optionally the installer UI ref).
 #
@@ -30,6 +31,8 @@ on:
   push:
     tags:
       - 'iso-v*'
+      - 'v*'
+  create:
   workflow_dispatch:
     inputs:
       tag:
@@ -70,6 +73,10 @@ permissions:
 
 jobs:
   build-and-release-iso:
+    if: >-
+      github.event_name != 'create' ||
+      (github.event.ref_type == 'tag' &&
+      (startsWith(github.event.ref, 'iso-v') || startsWith(github.event.ref, 'v')))
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -91,7 +98,28 @@ jobs:
             # Read pinned build inputs from release-inputs.env.
             if [ ! -f release-inputs.env ]; then
               echo "ERROR: release-inputs.env not found." >&2
-              echo "Create release-inputs.env in the repo root and set ROOTFS_REF before pushing an iso-v* tag." >&2
+              echo "Create release-inputs.env in the repo root and set ROOTFS_REF before pushing an ISO version tag." >&2
+              exit 1
+            fi
+            # shellcheck source=release-inputs.env
+            source release-inputs.env
+
+            if [ -z "${ROOTFS_REF:-}" ]; then
+              echo "ERROR: ROOTFS_REF is not set in release-inputs.env." >&2
+              echo "Update release-inputs.env with the target rootfs version tag before pushing the ISO tag." >&2
+              exit 1
+            fi
+
+            ROOTFS_REPO="${ROOTFS_REPO:-daygle/dayshield-rootfs}"
+            INSTALLER_UI_REF_REQUESTED="${INSTALLER_UI_REF:-}"
+          elif [ "${{ github.event_name }}" = "create" ]; then
+            # Tag create (for tags created in GitHub UI/API): derive tag from create payload.
+            RELEASE_TAG="${{ github.event.ref }}"
+
+            # Read pinned build inputs from release-inputs.env.
+            if [ ! -f release-inputs.env ]; then
+              echo "ERROR: release-inputs.env not found." >&2
+              echo "Create release-inputs.env in the repo root and set ROOTFS_REF before creating an ISO version tag." >&2
               exit 1
             fi
             # shellcheck source=release-inputs.env
