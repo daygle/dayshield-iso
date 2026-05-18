@@ -392,19 +392,22 @@ systemctl status ssh
 
 ### Troubleshooting - updater readiness
 
-Installed systems use the registry-based updater by default (GitHub Releases
-artifacts), not local source builds. If updates are not detected/applied,
-validate basic connectivity and settings:
+Installed systems use the registry-based updater by default (manifest-driven
+GitHub Releases artifacts), not local source builds. If updates are not
+detected/applied, validate basic connectivity and settings:
 
 ```sh
 # DNS and outbound reachability
 getent hosts api.github.com
-curl -fsS https://api.github.com/repos/daygle/dayshield-core/releases/latest | head -c 200
+
+# Check the central update manifest (hosted in dayshield-core)
+curl -fsS https://raw.githubusercontent.com/daygle/dayshield-core/main/manifest.json | head -c 500
 ```
 
-Then review update settings in the DayShield UI/API and confirm the release
-contains `core-v*.tar.zst`, `ui-v*.tar.zst`, `rootfs-v*.tar.zst`, and
-`checksums.txt`.
+Then review update settings in the DayShield UI/API and confirm the manifest
+lists `core`, `ui`, and `rootfs` entries each with their own independent
+`version`, `downloadUrl`, and `checksumSha256` fields. The manifest is updated
+independently per component; component versions do not need to match.
 
 > **Port note:** port `8443` is the installer UI (live ISO only).
 
@@ -735,44 +738,115 @@ No Tailwind compile step is required for installer UI integration.
 
 ## Release artifacts and update flow
 
-You only need to create a version tag on `dayshield-core`.
-The release workflow in `dayshield-core/.github/workflows/release-artifacts.yml`
-automatically builds and publishes artifacts for all components:
+`dayshield-core`, `dayshield-ui`, and `dayshield-rootfs` are versioned
+**independently**. Each repo owns its own tags, release artifacts, and release
+cadence. Component version numbers do not need to match.
 
-- `core-vX.Y.Z.tar.zst`
-- `ui-vX.Y.Z.tar.zst`
-- `rootfs-vX.Y.Z.tar.zst`
-- `checksums.txt`
+### How runtime updates work (Option B — manifest-driven)
 
-### Step-by-step
+A central manifest (hosted in `dayshield-core`) lists the **latest published
+artifact for each component**:
 
-1. Ensure all required changes are merged to the source branches:
-  - `dayshield-core` (core binary)
-  - `dayshield-ui` (web UI bundle)
-  - `dayshield-rootfs` (rootfs content)
-2. Create a tag in `dayshield-core` using either method:
-  - GitHub web: Releases -> Draft a new release -> Create new tag `vX.Y.Z`
-  - CLI:
-
-```sh
-cd ~/dayshield-core
-git tag v1.2.3
-git push origin v1.2.3
+```json
+{
+  "generatedAt": "2026-05-18T12:00:00Z",
+  "components": [
+    {
+      "component": "core",
+      "version": "1.4.0",
+      "repo": "daygle/dayshield-core",
+      "downloadUrl": "...",
+      "checksumSha256": "..."
+    },
+    {
+      "component": "ui",
+      "version": "0.9.2",
+      "repo": "daygle/dayshield-ui",
+      "downloadUrl": "...",
+      "checksumSha256": "..."
+    },
+    {
+      "component": "rootfs",
+      "version": "2.1.0",
+      "repo": "daygle/dayshield-rootfs",
+      "downloadUrl": "...",
+      "checksumSha256": "..."
+    }
+  ]
+}
 ```
 
-3. GitHub Actions runs automatically on tag push and creates a GitHub Release
-  containing all update artifacts.
-4. Installed systems check the registry/release endpoint and show available
-  versions in DayShield System -> Software Updates.
+Installed systems check this manifest and compare each component's installed
+version against the manifest entry individually. A component that has not
+changed is not updated, regardless of whether other components have new
+releases.
 
-### Important behavior
+### Releasing a component
 
-- You do not need separate tags in `dayshield-ui` or `dayshield-rootfs` for
-  this workflow.
-- The workflow currently checks out `main` for UI and rootfs at build time, so
-  release reproducibility depends on branch state when the tag runs.
-- Installed systems use these published artifacts through the registry-based
-  updater; they do not build core or UI locally.
+When a component changes, release only that component:
+
+| Repo | What to do |
+|------|-----------|
+| `dayshield-core` | Tag the repo (e.g. `v1.4.0`), publish `core-v1.4.0.tar.zst` + checksums, update manifest `core` entry |
+| `dayshield-ui` | Tag the repo (e.g. `v0.9.2`), publish `ui-v0.9.2.tar.zst` + checksums, update manifest `ui` entry |
+| `dayshield-rootfs` | Tag the repo (e.g. `v2.1.0`), publish `rootfs-v2.1.0.tar.zst` + checksums, update manifest `rootfs` entry |
+
+You do **not** need to bump version numbers or create tags in other repos just
+because one component changed.
+
+### When to build and release a new ISO
+
+A new ISO is **installer media** — it is not required for runtime updates to
+installed systems. Build and publish a new ISO when:
+
+- you want to ship a new installable baseline (e.g. updated default rootfs
+  baked in, new installer UI, improved boot configuration)
+- you want to distribute a stable installation point for a specific set of
+  component versions
+
+The ISO release tag is independent of component version tags. A reasonable
+convention is to use a separate ISO-specific tag (e.g. `iso-v1.0.3`) or a
+date-based tag, so it is clear that the ISO version does not track any single
+component version.
+
+### ISO build inputs
+
+Each ISO build takes explicit, pinned inputs:
+
+- **rootfs artifact** — a specific `rootfs-vX.Y.Z.tar.zst` from `dayshield-rootfs`
+- **installer UI** — a specific ref from `dayshield-installer-ui`
+
+These inputs are chosen at ISO build time and determine what gets baked into the
+ISO. After installation, the appliance receives runtime updates through the
+manifest independently of the rootfs version that was baked into the ISO.
+
+### Step-by-step (new ISO release)
+
+1. Ensure the desired rootfs version is released in `dayshield-rootfs` (e.g. `v2.1.0`).
+2. Choose an ISO tag for this release (e.g. `iso-v1.0.3`).
+3. Trigger the ISO release workflow with the rootfs ref and the new ISO tag:
+
+```sh
+# Via GitHub Actions workflow_dispatch or gh CLI:
+gh workflow run build-iso-release.yml \
+  --field tag=iso-v1.0.3 \
+  --field rootfs_ref=v2.1.0 \
+  --field rootfs_repo=daygle/dayshield-rootfs
+```
+
+4. The workflow downloads the specified rootfs artifact from `dayshield-rootfs`,
+   builds the ISO, and publishes it as a GitHub Release in this repo.
+
+### Important notes
+
+- Component versions in the manifest are independent. `core v1.4.0` may be
+  current while `rootfs` is still at `v2.1.0` from a previous release — that is
+  normal and expected.
+- The ISO bakes in a rootfs snapshot. Installed systems receive post-install
+  runtime updates from the manifest, so the ISO rootfs version is an
+  **installation baseline**, not a locked version.
+- You do **not** need to release a new ISO every time a component is updated.
+  New ISOs are only needed when you want to update the installable medium.
 
 For deeper details, see:
 
