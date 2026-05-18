@@ -820,11 +820,44 @@ These inputs are chosen at ISO build time and determine what gets baked into the
 ISO. After installation, the appliance receives runtime updates through the
 manifest independently of the rootfs version that was baked into the ISO.
 
+### `release-inputs.env` — pinned inputs for tag-triggered builds
+
+The file `release-inputs.env` in the repository root pins the build inputs used
+when a release tag is pushed.  Update it before pushing an `iso-v*` tag:
+
+```sh
+# release-inputs.env
+ROOTFS_REF=v2.1.0                        # rootfs tag to embed
+ROOTFS_REPO=daygle/dayshield-rootfs      # rootfs source repo (usually unchanged)
+INSTALLER_UI_REF=                        # leave blank for default (main)
+```
+
+This file is **only consulted for tag-push builds**.  `workflow_dispatch` and
+`repository_dispatch` callers supply inputs directly and ignore this file.
+
 ### Step-by-step (new ISO release)
 
-1. Ensure the desired rootfs version is released in `dayshield-rootfs` (e.g. `v2.1.0`).
-2. Choose an ISO tag for this release (e.g. `iso-v1.0.3`).
-3. Trigger the ISO release workflow with the rootfs ref and the new ISO tag:
+#### Option A — tag push (recommended for standard releases)
+
+1. Ensure the desired rootfs version is released in `dayshield-rootfs`
+   (e.g. `v2.1.0`).
+2. Update `release-inputs.env` with the rootfs ref you want to embed:
+   ```sh
+   # In release-inputs.env:
+   ROOTFS_REF=v2.1.0
+   ```
+3. Commit the change, then push an `iso-v*` tag:
+   ```sh
+   git add release-inputs.env
+   git commit -m "chore: pin rootfs v2.1.0 for iso-v1.0.3"
+   git tag iso-v1.0.3
+   git push origin iso-v1.0.3
+   ```
+4. The `build-iso-release` workflow triggers automatically, reads
+   `release-inputs.env`, builds the ISO, and publishes it as a GitHub Release
+   in this repo tagged `iso-v1.0.3`.
+
+#### Option B — workflow_dispatch (ad-hoc or override builds)
 
 ```sh
 # Via GitHub Actions workflow_dispatch or gh CLI:
@@ -834,8 +867,13 @@ gh workflow run build-iso-release.yml \
   --field rootfs_repo=daygle/dayshield-rootfs
 ```
 
-4. The workflow downloads the specified rootfs artifact from `dayshield-rootfs`,
-   builds the ISO, and publishes it as a GitHub Release in this repo.
+The workflow downloads the specified rootfs artifact from `dayshield-rootfs`,
+builds the ISO, and publishes it as a GitHub Release in this repo.
+
+#### Option C — repository_dispatch (programmatic / CI integration)
+
+POST to the GitHub API with event type `build-iso-from-release` and
+`client_payload` fields: `tag`, `rootfs_ref`, `rootfs_repo`, `installer_ui_ref`.
 
 ### Important notes
 
@@ -847,6 +885,9 @@ gh workflow run build-iso-release.yml \
   **installation baseline**, not a locked version.
 - You do **not** need to release a new ISO every time a component is updated.
   New ISOs are only needed when you want to update the installable medium.
+- A single core, ui, or rootfs tag push does **not** automatically trigger an
+  ISO release.  ISO releases are a separate concern, triggered explicitly by
+  pushing an `iso-v*` tag or running the workflow manually.
 
 For deeper details, see:
 
