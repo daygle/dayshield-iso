@@ -228,6 +228,7 @@ jobs:
           gh release download "${ROOTFS_REF}" \
             --repo "${ROOTFS_REPO}" \
             --pattern "${ROOTFS_ASSET}" \
+            --pattern "${ROOTFS_ASSET}.sha256" \
             --pattern "checksums.txt" \
             --dir artifacts
           if [ ! -f "artifacts/${ROOTFS_ASSET}" ]; then
@@ -236,19 +237,34 @@ jobs:
             gh release view "${ROOTFS_REF}" --repo "${ROOTFS_REPO}" --json assets --jq '.assets[].name' >&2 || true
             exit 1
           fi
+          if [ -f "artifacts/${ROOTFS_ASSET}.sha256" ]; then
+            ROOTFS_CHECKSUM_FILE="${ROOTFS_ASSET}.sha256"
+          elif [ -f "artifacts/checksums.txt" ]; then
+            ROOTFS_CHECKSUM_FILE="checksums.txt"
+          else
+            echo "ERROR: missing checksum asset (${ROOTFS_ASSET}.sha256 or checksums.txt) in ${ROOTFS_REPO}@${ROOTFS_REF}" >&2
+            echo "Available assets:" >&2
+            gh release view "${ROOTFS_REF}" --repo "${ROOTFS_REPO}" --json assets --jq '.assets[].name' >&2 || true
+            exit 1
+          fi
           echo "ROOTFS_ASSET=${ROOTFS_ASSET}" >> "$GITHUB_ENV"
+          echo "ROOTFS_CHECKSUM_FILE=${ROOTFS_CHECKSUM_FILE}" >> "$GITHUB_ENV"
           ls -lh artifacts
 
       - name: Verify rootfs checksum
         run: |
           set -euo pipefail
           cd artifacts
-          awk -v file="${ROOTFS_ASSET}" '$2 == file {print $1 "  " $2}' checksums.txt > rootfs.sha256
-          if [ "$(wc -l < rootfs.sha256)" -ne 1 ]; then
-            echo "ERROR: expected exactly one checksum entry for ${ROOTFS_ASSET}" >&2
-            echo "Matching entries found:" >&2
-            awk -v file="${ROOTFS_ASSET}" '$2 == file {print}' checksums.txt >&2 || true
-            exit 1
+          if [ "${ROOTFS_CHECKSUM_FILE}" = "${ROOTFS_ASSET}.sha256" ]; then
+            cp "${ROOTFS_CHECKSUM_FILE}" rootfs.sha256
+          else
+            awk -v file="${ROOTFS_ASSET}" '$2 == file {print $1 "  " $2}' "${ROOTFS_CHECKSUM_FILE}" > rootfs.sha256
+            if [ "$(wc -l < rootfs.sha256)" -ne 1 ]; then
+              echo "ERROR: expected exactly one checksum entry for ${ROOTFS_ASSET} in ${ROOTFS_CHECKSUM_FILE}" >&2
+              echo "Matching entries found:" >&2
+              awk -v file="${ROOTFS_ASSET}" '$2 == file {print}' "${ROOTFS_CHECKSUM_FILE}" >&2 || true
+              exit 1
+            fi
           fi
           sha256sum -c rootfs.sha256
           ROOTFS_SHA256="$(awk '{print $1}' rootfs.sha256)"
