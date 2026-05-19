@@ -10,8 +10,8 @@ name: Build & Release
 #
 # Trigger options
 # ---------------
-# 1. Tag push/create (automated)
-#    Push or create an iso-v* tag (e.g. iso-v1.0.3) or v* tag (e.g. v1.0.3)
+# 1. Tag push (automated)
+#    Push an iso-v* tag (e.g. iso-v1.0.3) or v* tag (e.g. v1.0.3)
 #    in this repository.
 #    Before pushing the tag, update `release-inputs.env` in this repo to pin
 #    the desired rootfs ref (and optionally the installer UI ref).
@@ -32,7 +32,6 @@ on:
     tags:
       - 'iso-v*'
       - 'v*'
-  create:
   workflow_dispatch:
     inputs:
       tag:
