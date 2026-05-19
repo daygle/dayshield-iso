@@ -1,4 +1,4 @@
-name: Build and Release ISO
+name: Build & Release
 
 # This workflow builds and publishes the DayShield installer ISO.
 #
