@@ -75,7 +75,7 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release-iso:
+  build-release:
     if: >-
       github.event_name != 'create' ||
       (github.event.ref_type == 'tag' &&
