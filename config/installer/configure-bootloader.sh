@@ -82,20 +82,20 @@ BOOT_UUID="$(blkid -s UUID -o value "$(blkid -L DAYSHIELD_BOOT)")"
 ROOT_A_UUID="$(blkid -s UUID -o value "$(blkid -L DAYSHIELD_ROOT_A)")"
 ROOT_B_UUID="$(blkid -s UUID -o value "$(blkid -L DAYSHIELD_ROOT_B)")"
 
-echo "--> Installing DayShield A/B boot entries ..."
+echo "--> Installing DayShield Primary/Secondary boot entries ..."
 install_slot_boot_files "a" "${TARGET}/boot"
 install_slot_boot_files "b" "${TARGET}/boot"
 cat > "${TARGET}/etc/grub.d/09_dayshield_ab" <<EOF
 #!/bin/sh
 set -e
 cat <<'GRUB_EOF'
-menuentry 'DayShield slot A' --id 'dayshield-a' {
+menuentry 'DayShield Primary System' --id 'dayshield-a' {
     search --no-floppy --fs-uuid --set=root ${BOOT_UUID}
     linux /dayshield/slot-a/vmlinuz root=UUID=${ROOT_A_UUID} ro quiet splash
     initrd /dayshield/slot-a/initrd.img
 }
 
-menuentry 'DayShield slot B' --id 'dayshield-b' {
+menuentry 'DayShield Secondary System' --id 'dayshield-b' {
     search --no-floppy --fs-uuid --set=root ${BOOT_UUID}
     linux /dayshield/slot-b/vmlinuz root=UUID=${ROOT_B_UUID} ro quiet splash
     initrd /dayshield/slot-b/initrd.img
