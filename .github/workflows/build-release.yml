@@ -36,30 +36,24 @@ on:
     inputs:
       tag:
         description: |
-          ISO release tag (e.g. iso-v1.0.3). This becomes the GitHub Release tag
-          for the ISO artifact and is independent of any component version tag.
+          ISO release tag (e.g. iso-v1.0.3).
         required: true
         type: string
       rootfs_repo:
         description: |
-          Repository containing the rootfs release artifact
-          (default: daygle/dayshield-rootfs). Each component is released
-          independently, so the rootfs repo has its own version tags.
+          Rootfs repo containing the release artifact.
         required: false
         default: daygle/dayshield-rootfs
         type: string
       rootfs_ref:
         description: |
-          Rootfs release tag to fetch (e.g. v2.1.0). This is the independent
-          version tag from the rootfs repo and does not need to match the ISO tag
-          or any other component version. Leave empty to auto-resolve latest stable release.
+          Rootfs Release Tag (e.g. v1.0.0). Leave empty to auto-resolve latest stable.
         required: false
         default: ""
         type: string
       installer_ui_ref:
         description: |
-          Installer UI ref (tag/branch/SHA).
-          Leave empty to auto-resolve latest stable release tag (fallback: main).
+          Installer UI Release Tag (e.g. v1.0.0). Leave empty to auto-resolve latest stable.
         required: false
         default: ""
         type: string
