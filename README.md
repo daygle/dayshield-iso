@@ -622,8 +622,9 @@ machine at `http://<live-ip>:8443/`.
 
 ### Web UI modes
 
-The live installer now offers two actions before disk selection:
+The live installer now offers three actions before disk selection:
 
+- **Fresh Install** installs DayShield on a blank or prepared disk.
 - **Upgrade from ISO** requires an existing DayShield A/B appliance disk. The
   installer formats only the inactive rootfs slot, extracts the ISO rootfs into
   that slot, copies persistent configuration from the active slot, schedules a
@@ -632,13 +633,13 @@ The live installer now offers two actions before disk selection:
 - **Reinstall from ISO** erases the selected disk and creates a fresh A/B
   appliance layout.
 
-### Web UI reinstall flow
+### Web UI install flow
 
 1. **Welcome** - brief overview
 2. **Disk selection** - lists available disks via `/api/detect-disks.sh`
 3. **Partition** - creates GPT layout: 1 MiB bios_grub + 512 MiB EFI + 1 GiB shared `/boot` + root slot A + root slot B
-4. **Format** - FAT32 EFI + ext4 shared boot + ext4 root slot A + ext4 root slot B
-5. **Install rootfs** - extracts `rootfs.tar.zst` from the ISO to the target
+4. **Format** - formats the EFI partition and root slots: FAT32 EFI, ext4 shared boot, ext4 root slot A, ext4 root slot B
+5. **Install rootfs** - extracts `rootfs.tar.zst` from the ISO into the target root slot(s)
 6. **Install bootloader** - installs GRUB (BIOS + UEFI) on the target disk
 7. **Configure** - hostname, root password, WAN/LAN interfaces
 8. **Finalize** - unmounts, syncs, removes installer artefacts
