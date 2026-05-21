@@ -3,12 +3,19 @@
 # Intermediate build artefacts
 build/
 
-# Generated ISO
+# Generated ISO and release artifacts
 *.iso
+*.sha256
 
-# Editor / OS artefacts
+# Local logs and temporary files
+*.log
+*~
+
+# Local environment/editor artifacts
+.venv
+venv
+.vscode/
 .DS_Store
 Thumbs.db
 *.swp
 *.swo
-*~
