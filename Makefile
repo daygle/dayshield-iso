@@ -14,6 +14,7 @@ OUTPUT       ?= dayshield.iso
 ARCH         ?= amd64
 INSTALLER_UI ?= ../dayshield-installer-ui/installer-ui
 ROOTFS_SHA256 ?=
+ISO          ?= $(OUTPUT)
 
 SCRIPTS_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))scripts
 
