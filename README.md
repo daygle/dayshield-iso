@@ -892,8 +892,8 @@ POST to the GitHub API with event type `build-iso-from-release` and
 
 For deeper details, see:
 
-- `../dayshield-core/UPDATE_SYSTEM.md`
-- `../dayshield-core/RELEASE_QUICK_START.md`
+- `../dayshield-core/.github/workflows/release-artifacts.yml`
+- `../dayshield-core/src/api/system.rs`
 
 ---
 
