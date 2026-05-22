@@ -310,7 +310,7 @@ seed_inactive_root_slot() {
     ROOT_B_MOUNT="$(mktemp -d)"
     mount "${ROOT_B_PART}" "${ROOT_B_MOUNT}"
 
-    info "Seeding root slot B from configured slot A ..."
+    info "Seeding secondary rootfs slot from configured primary slot ..."
     tar -C "${TARGET_MOUNT}" --one-file-system -cpf - . | tar -C "${ROOT_B_MOUNT}" -xpf -
 
     mkdir -p \
@@ -495,7 +495,7 @@ choose_install_mode() {
 
     echo ""
     echo "DayShield ISO options:"
-    echo "  [1] Upgrade from ISO   - stage this ISO rootfs into the inactive A/B slot"
+    echo "  [1] Upgrade from ISO   - stage this ISO rootfs into the inactive Primary/Secondary slot"
     echo "  [2] Reinstall from ISO - erase the selected disk and install fresh"
     while true; do
         read -rp "Select mode [1-2]: " _mode
@@ -535,7 +535,7 @@ choose_install_mode
 
 if [[ "${INSTALL_MODE}" == "upgrade" ]]; then
     info "Upgrading existing DayShield appliance on ${TARGET_DISK} from ISO"
-    info "The inactive A/B rootfs slot will be replaced; the active slot remains available for rollback."
+    info "The inactive Primary/Secondary rootfs slot will be replaced; the active slot remains available for rollback."
     if [[ "${DAYSHIELD_UNATTENDED:-}" != "1" ]]; then
         read -rp "Type '${TARGET_DISK}' to stage ISO upgrade: " confirm
         [[ "${confirm}" == "${TARGET_DISK}" ]] || error "Upgrade cancelled."
@@ -589,7 +589,7 @@ fi
 [[ -b "${EFI_PART}" ]]  || error "EFI partition device not found: ${EFI_PART}"
 [[ -b "${BOOT_PART}" ]] || error "Boot partition device not found: ${BOOT_PART}"
 [[ -b "${ROOT_PART}" ]] || error "Root partition device not found: ${ROOT_PART}"
-[[ -b "${ROOT_B_PART}" ]] || error "Root slot B partition device not found: ${ROOT_B_PART}"
+[[ -b "${ROOT_B_PART}" ]] || error "Secondary rootfs partition device not found: ${ROOT_B_PART}"
 
 info "Formatting EFI partition: ${EFI_PART}"
 mkfs.fat -F 32 -n "DS_EFI" "${EFI_PART}"
@@ -597,11 +597,11 @@ mkfs.fat -F 32 -n "DS_EFI" "${EFI_PART}"
 info "Formatting shared boot partition: ${BOOT_PART}"
 mkfs.ext4 -F -L "DAYSHIELD_BOOT" "${BOOT_PART}"
 
-info "Formatting root slot A: ${ROOT_PART}"
-mkfs.ext4 -F -L "DAYSHIELD_ROOT_A" "${ROOT_PART}"
+info "Formatting primary rootfs slot: ${ROOT_PART}"
+mkfs.ext4 -F -L "DS_PRIMARY" "${ROOT_PART}"
 
-info "Formatting root slot B: ${ROOT_B_PART}"
-mkfs.ext4 -F -L "DAYSHIELD_ROOT_B" "${ROOT_B_PART}"
+info "Formatting secondary rootfs slot: ${ROOT_B_PART}"
+mkfs.ext4 -F -L "DS_SECONDARY" "${ROOT_B_PART}"
 
 # ---------------------------------------------------------------------------
 # Mount

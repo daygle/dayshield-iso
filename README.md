@@ -361,7 +361,7 @@ available) or from another machine on the same network.
 Installation steps:
 
 1. **Select disk** - choose target installation disk
-2. **Partition** - creates GPT layout: 1 MiB bios_grub + 512 MiB EFI + 1 GiB shared `/boot` + root slot A + root slot B
+2. **Partition** - creates GPT layout: 1 MiB bios_grub + 512 MiB EFI + 1 GiB shared `/boot` + primary rootfs + secondary rootfs
 3. **Format** - FAT32 EFI, ext4 root
 4. **Install rootfs** - extracts the rootfs archive from the ISO to the target
 5. **Install bootloader** - GRUB BIOS + UEFI on the target disk
@@ -467,7 +467,7 @@ dayshield-iso/
 |       |-- install.sh              # CLI installer orchestrator (fallback)
 |       |-- partition.sh            # GPT disk partitioning
 |       |-- copy-rootfs.sh          # squashfs -> target filesystem copy
-|       |-- upgrade-rootfs.sh       # ISO rootfs upgrade into inactive A/B slot
+|       |-- upgrade-rootfs.sh       # ISO rootfs upgrade into inactive Primary/Secondary slot
 |       |-- configure-bootloader.sh # Install GRUB on target disk
 |       |-- firstboot.service       # systemd unit for first-boot tasks
 |       `-- firstboot-run.sh        # First-boot script (SSH keys, machine-id...)
@@ -625,20 +625,20 @@ machine at `http://<live-ip>:8443/`.
 The live installer now offers three actions before disk selection:
 
 - **Fresh Install** installs DayShield on a blank or prepared disk.
-- **Upgrade from ISO** requires an existing DayShield A/B appliance disk. The
+- **Upgrade from ISO** requires an existing DayShield Primary/Secondary appliance disk. The
   installer formats only the inactive rootfs slot, extracts the ISO rootfs into
   that slot, copies persistent configuration from the active slot, schedules a
   one-shot GRUB boot into the upgraded slot, and relies on DayShield health
   confirmation/rollback after reboot.
-- **Reinstall from ISO** erases the selected disk and creates a fresh A/B
+- **Reinstall from ISO** erases the selected disk and creates a fresh Primary/Secondary
   appliance layout.
 
 ### Web UI install flow
 
 1. **Welcome** - brief overview
 2. **Disk selection** - lists available disks via `/api/detect-disks.sh`
-3. **Partition** - creates GPT layout: 1 MiB bios_grub + 512 MiB EFI + 1 GiB shared `/boot` + root slot A + root slot B
-4. **Format** - formats the EFI partition and root slots: FAT32 EFI, ext4 shared boot, ext4 root slot A, ext4 root slot B
+3. **Partition** - creates GPT layout: 1 MiB bios_grub + 512 MiB EFI + 1 GiB shared `/boot` + primary rootfs + secondary rootfs
+4. **Format** - formats the EFI partition and root slots: FAT32 EFI, ext4 shared boot, ext4 `DS_PRIMARY`, ext4 `DS_SECONDARY`
 5. **Install rootfs** - extracts `rootfs.tar.zst` from the ISO into the target root slot(s)
 6. **Install bootloader** - installs GRUB (BIOS + UEFI) on the target disk
 7. **Configure** - hostname, root password, WAN/LAN interfaces
@@ -657,7 +657,7 @@ If the web UI cannot be used, shell installer scripts are available under
 # Specify target disk explicitly
 DAYSHIELD_TARGET_DISK=/dev/sda /usr/lib/dayshield-installer/install.sh
 
-# Stage an ISO rootfs upgrade into the inactive A/B slot
+# Stage an ISO rootfs upgrade into the inactive Primary/Secondary slot
 DAYSHIELD_INSTALL_MODE=upgrade \
 DAYSHIELD_TARGET_DISK=/dev/sda \
 /usr/lib/dayshield-installer/install.sh

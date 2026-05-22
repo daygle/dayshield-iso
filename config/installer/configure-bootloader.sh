@@ -78,9 +78,23 @@ install_slot_boot_files() {
     cp "${initrd}" "${dest}/initrd.img"
 }
 
+label_device() {
+    blkid -L "$1" 2>/dev/null || true
+}
+
+root_slot_device() {
+    local label="$1" legacy_label="$2" dev
+    dev="$(label_device "${label}")"
+    [[ -n "${dev}" ]] || dev="$(label_device "${legacy_label}")"
+    printf '%s\n' "${dev}"
+}
+
 BOOT_UUID="$(blkid -s UUID -o value "$(blkid -L DAYSHIELD_BOOT)")"
-ROOT_A_UUID="$(blkid -s UUID -o value "$(blkid -L DAYSHIELD_ROOT_A)")"
-ROOT_B_UUID="$(blkid -s UUID -o value "$(blkid -L DAYSHIELD_ROOT_B)")"
+ROOT_A_DEV="$(root_slot_device DS_PRIMARY DAYSHIELD_ROOT_A)"
+ROOT_B_DEV="$(root_slot_device DS_SECONDARY DAYSHIELD_ROOT_B)"
+[[ -n "${ROOT_A_DEV}" && -n "${ROOT_B_DEV}" ]] || { echo "ERROR: Primary/Secondary rootfs labels were not found" >&2; exit 1; }
+ROOT_A_UUID="$(blkid -s UUID -o value "${ROOT_A_DEV}")"
+ROOT_B_UUID="$(blkid -s UUID -o value "${ROOT_B_DEV}")"
 
 echo "--> Installing DayShield Primary/Secondary boot entries ..."
 install_slot_boot_files "a" "${TARGET}/boot"

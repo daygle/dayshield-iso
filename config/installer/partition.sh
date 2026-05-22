@@ -5,8 +5,8 @@
 #   Partition 1: BIOS boot partition (1 MiB, bios_grub)
 #   Partition 2: EFI System Partition (512 MiB, FAT32)
 #   Partition 3: Shared boot partition (1 GiB, ext4)
-#   Partition 4: Linux root slot A (roughly half remaining disk, ext4)
-#   Partition 5: Linux root slot B (roughly half remaining disk, ext4)
+#   Partition 4: Primary rootfs slot (roughly half remaining disk, ext4)
+#   Partition 5: Secondary rootfs slot (roughly half remaining disk, ext4)
 #
 # Usage: partition.sh <disk>  e.g. partition.sh /dev/sda
 
@@ -31,8 +31,8 @@ parted --script "${DISK}" \
     mkpart "EFI"  fat32  2MiB   514MiB \
     set 2 esp on \
     mkpart "BOOT" ext4   514MiB 1538MiB \
-    mkpart "ROOT_A" ext4 1538MiB 50% \
-    mkpart "ROOT_B" ext4 50% 100%
+    mkpart "PRIMARY_ROOTFS" ext4 1538MiB 50% \
+    mkpart "SECONDARY_ROOTFS" ext4 50% 100%
 
 # Inform the kernel of the new partition table
 partprobe "${DISK}" 2>/dev/null || true

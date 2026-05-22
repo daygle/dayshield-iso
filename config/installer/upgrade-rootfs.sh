@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# upgrade-rootfs.sh - Stage an ISO rootfs into the inactive DayShield A/B slot.
+# upgrade-rootfs.sh - Stage an ISO rootfs into the inactive DayShield Primary/Secondary slot.
 #
 # Usage: upgrade-rootfs.sh <disk> <filesystem.squashfs>
 
@@ -53,6 +53,17 @@ require_on_target_disk() {
 
 uuid_of() {
     blkid -s UUID -o value "$1"
+}
+
+label_device() {
+    blkid -L "$1" 2>/dev/null || true
+}
+
+root_slot_device() {
+    local label="$1" legacy_label="$2" dev
+    dev="$(label_device "${label}")"
+    [[ -n "${dev}" ]] || dev="$(label_device "${legacy_label}")"
+    printf '%s\n' "${dev}"
 }
 
 read_default_slot() {
@@ -212,11 +223,11 @@ schedule_trial_boot() {
 [[ -b "${TARGET_DISK}" ]] || error "Not a block device: ${TARGET_DISK}"
 [[ -f "${SQUASHFS_IMG}" ]] || error "Rootfs squashfs not found: ${SQUASHFS_IMG}"
 
-ROOT_A_DEV="$(blkid -L DAYSHIELD_ROOT_A 2>/dev/null || true)"
-ROOT_B_DEV="$(blkid -L DAYSHIELD_ROOT_B 2>/dev/null || true)"
+ROOT_A_DEV="$(root_slot_device DS_PRIMARY DAYSHIELD_ROOT_A)"
+ROOT_B_DEV="$(root_slot_device DS_SECONDARY DAYSHIELD_ROOT_B)"
 BOOT_DEV="$(blkid -L DAYSHIELD_BOOT 2>/dev/null || true)"
 [[ -n "${ROOT_A_DEV}" && -n "${ROOT_B_DEV}" && -n "${BOOT_DEV}" ]] || \
-    error "No DayShield A/B installation found. ISO upgrade requires an existing A/B appliance."
+    error "No DayShield Primary/Secondary installation found. ISO upgrade requires an existing Primary/Secondary appliance."
 require_on_target_disk "${ROOT_A_DEV}"
 require_on_target_disk "${ROOT_B_DEV}"
 require_on_target_disk "${BOOT_DEV}"
@@ -238,8 +249,8 @@ info "Detecting active DayShield rootfs slot ..."
 mount "${BOOT_DEV}" "${BOOT_MOUNT}"
 ACTIVE_SLOT="$(read_default_slot)"
 case "${ACTIVE_SLOT}" in
-    a) ACTIVE_DEV="${ROOT_A_DEV}"; INACTIVE_SLOT="b"; INACTIVE_DEV="${ROOT_B_DEV}"; INACTIVE_LABEL="DAYSHIELD_ROOT_B" ;;
-    b) ACTIVE_DEV="${ROOT_B_DEV}"; INACTIVE_SLOT="a"; INACTIVE_DEV="${ROOT_A_DEV}"; INACTIVE_LABEL="DAYSHIELD_ROOT_A" ;;
+    a) ACTIVE_DEV="${ROOT_A_DEV}"; INACTIVE_SLOT="b"; INACTIVE_DEV="${ROOT_B_DEV}"; INACTIVE_LABEL="DS_SECONDARY" ;;
+    b) ACTIVE_DEV="${ROOT_B_DEV}"; INACTIVE_SLOT="a"; INACTIVE_DEV="${ROOT_A_DEV}"; INACTIVE_LABEL="DS_PRIMARY" ;;
     *) error "Invalid active slot detected: ${ACTIVE_SLOT}" ;;
 esac
 umount "${BOOT_MOUNT}"
