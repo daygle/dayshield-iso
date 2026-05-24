@@ -155,7 +155,7 @@ jobs:
           echo "Building ISO tag:    ${RELEASE_TAG}"
           echo "Rootfs repo:         ${ROOTFS_REPO}"
           echo "Rootfs ref:          ${ROOTFS_REF}"
-          echo "Installer UI ref:    ${INSTALLER_UI_REF_REQUESTED:-<auto: latest stable release, fallback main>}"
+          echo "Installer UI ref:    ${INSTALLER_UI_REF_REQUESTED:-<auto: latest stable release>}"
 
       - name: Resolve installer UI ref
         id: resolve_installer_ui_ref
@@ -164,47 +164,56 @@ jobs:
         run: |
           set -euo pipefail
           REPO="daygle/dayshield-installer-ui"
-          REPO_URL="https://github.com/daygle/dayshield-installer-ui.git"
           CANDIDATE="${INSTALLER_UI_REF_REQUESTED}"
+          LATEST_STABLE="$(gh release list --repo "${REPO}" --limit 1 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[0].tagName')"
 
-          # If no installer UI ref was requested, auto-resolve latest stable
-          # release tag; fallback to main if none is available.
-          if [ -z "${CANDIDATE}" ]; then
-            RESOLVED="$(gh release list --repo "${REPO}" --limit 1 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[0].tagName')"
-            if [ -n "${RESOLVED}" ] && [ "${RESOLVED}" != "null" ]; then
-              echo "Auto-resolved installer UI release tag: ${RESOLVED}"
-            else
-              RESOLVED="main"
-              echo "WARNING: no stable installer UI release found; falling back to '${RESOLVED}'"
-            fi
-          elif git ls-remote --exit-code --heads "${REPO_URL}" "${CANDIDATE}" >/dev/null 2>&1 || \
-               git ls-remote --exit-code --tags "${REPO_URL}" "${CANDIDATE}" >/dev/null 2>&1; then
-            RESOLVED="${CANDIDATE}"
-            echo "Resolved installer UI ref: ${RESOLVED}"
-          elif git ls-remote --exit-code --heads "${REPO_URL}" "main" >/dev/null 2>&1; then
-            RESOLVED="main"
-            echo "WARNING: installer UI ref '${CANDIDATE}' was not found; falling back to '${RESOLVED}'"
-          else
-            echo "ERROR: installer UI ref '${CANDIDATE}' not found, and fallback branch 'main' does not exist" >&2
+          if [ -z "${LATEST_STABLE}" ] || [ "${LATEST_STABLE}" = "null" ]; then
+            echo "ERROR: no stable installer UI release found in ${REPO}" >&2
             exit 1
+          fi
+
+          # If no installer UI ref was requested, use latest stable release.
+          if [ -z "${CANDIDATE}" ]; then
+            RESOLVED="${LATEST_STABLE}"
+            echo "Auto-resolved installer UI release tag: ${RESOLVED}"
+          elif gh release view "${CANDIDATE}" --repo "${REPO}" >/dev/null 2>&1; then
+            RESOLVED="${CANDIDATE}"
+            echo "Resolved installer UI release tag: ${RESOLVED}"
+          else
+            RESOLVED="${LATEST_STABLE}"
+            echo "WARNING: installer UI release '${CANDIDATE}' not found; using latest stable release '${RESOLVED}'"
           fi
 
           echo "INSTALLER_UI_REF=${RESOLVED}" >> "$GITHUB_ENV"
           echo "installer_ui_ref=${RESOLVED}" >> "$GITHUB_OUTPUT"
 
-      - name: Download installer UI source snapshot
+      - name: Download installer UI payload
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          mkdir -p deps/dayshield-installer-ui
-          TMP_TARBALL="$(mktemp)"
-          gh api \
-            -H "Accept: application/vnd.github+json" \
-            "repos/daygle/dayshield-installer-ui/tarball/${INSTALLER_UI_REF}" \
-            > "${TMP_TARBALL}"
-          tar -xf "${TMP_TARBALL}" --strip-components=1 -C deps/dayshield-installer-ui
-          rm -f "${TMP_TARBALL}"
+          INSTALLER_REPO="daygle/dayshield-installer-ui"
+          INSTALLER_ARTIFACT="installer-ui-${INSTALLER_UI_REF}.tar.gz"
+          INSTALLER_SHA256="${INSTALLER_ARTIFACT}.sha256"
+          ARTIFACT_DIR="${GITHUB_WORKSPACE}/deps-artifacts/installer-ui"
+          INSTALLER_DEST_DIR="deps/dayshield-installer-ui"
+
+          rm -rf "${ARTIFACT_DIR}" "${INSTALLER_DEST_DIR}"
+          mkdir -p "${ARTIFACT_DIR}" "${INSTALLER_DEST_DIR}"
+
+          gh release download "${INSTALLER_UI_REF}" \
+            --repo "${INSTALLER_REPO}" \
+            --pattern "${INSTALLER_ARTIFACT}" \
+            --pattern "${INSTALLER_SHA256}" \
+            --dir "${ARTIFACT_DIR}"
+
+          if [ ! -f "${ARTIFACT_DIR}/${INSTALLER_ARTIFACT}" ] || [ ! -f "${ARTIFACT_DIR}/${INSTALLER_SHA256}" ]; then
+            echo "ERROR: missing installer-ui release artifact or checksum for ${INSTALLER_UI_REF}" >&2
+            exit 1
+          fi
+
+          (cd "${ARTIFACT_DIR}" && sha256sum -c "${INSTALLER_SHA256}")
+          tar -xzf "${ARTIFACT_DIR}/${INSTALLER_ARTIFACT}" -C "${INSTALLER_DEST_DIR}"
 
       - name: Install ISO build dependencies
         run: |
