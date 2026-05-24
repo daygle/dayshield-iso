@@ -300,7 +300,7 @@ jobs:
           cat "${ISO_NAME}.sha256"
 
       - name: Create or update ISO release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e6 # v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: ISO ${{ env.RELEASE_TAG }}
