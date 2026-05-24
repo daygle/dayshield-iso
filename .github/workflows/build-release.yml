@@ -192,12 +192,19 @@ jobs:
           echo "INSTALLER_UI_REF=${RESOLVED}" >> "$GITHUB_ENV"
           echo "installer_ui_ref=${RESOLVED}" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout installer UI repository
-        uses: actions/checkout@v5
-        with:
-          repository: daygle/dayshield-installer-ui
-          path: deps/dayshield-installer-ui
-          ref: ${{ steps.resolve_installer_ui_ref.outputs.installer_ui_ref }}
+      - name: Download installer UI source snapshot
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p deps/dayshield-installer-ui
+          TMP_TARBALL="$(mktemp)"
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            "repos/daygle/dayshield-installer-ui/tarball/${INSTALLER_UI_REF}" \
+            > "${TMP_TARBALL}"
+          tar -xf "${TMP_TARBALL}" --strip-components=1 -C deps/dayshield-installer-ui
+          rm -f "${TMP_TARBALL}"
 
       - name: Install ISO build dependencies
         run: |
