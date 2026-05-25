@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# upgrade-rootfs.sh - Stage an ISO rootfs into the inactive DayShield Primary/Secondary slot.
+# upgrade-rootfs.sh - Stage an ISO OSTree deployment onto an existing DayShield install.
 #
 # Usage: upgrade-rootfs.sh <disk> <filesystem.squashfs>
 
@@ -9,29 +9,35 @@ INSTALLER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET_DISK="${1:?"Usage: upgrade-rootfs.sh <disk> <filesystem.squashfs>"}"
 SQUASHFS_IMG="${2:?"Usage: upgrade-rootfs.sh <disk> <filesystem.squashfs>"}"
 TARGET_MOUNT="/mnt/target"
-ACTIVE_MOUNT=""
-BOOT_MOUNT=""
-ACTIVE_SLOT=""
-INACTIVE_SLOT=""
-ACTIVE_DEV=""
-INACTIVE_DEV=""
-INACTIVE_LABEL=""
+STAGING_MOUNT=""
+BOOT_MOUNTED=0
+EFI_MOUNTED=0
+STATE_MOUNTED=0
 
 info()  { echo "[INFO]  $*"; }
 warn()  { echo "[WARN]  $*" >&2; }
 error() { echo "[ERROR] $*" >&2; exit 1; }
 
 cleanup() {
-    for _fs in run dev/pts dev sys proc; do
-        umount -lf "${TARGET_MOUNT}/${_fs}" 2>/dev/null || true
-    done
-    umount -lf "${TARGET_MOUNT}/boot/efi" 2>/dev/null || true
-    umount -lf "${TARGET_MOUNT}/boot" 2>/dev/null || true
-    [[ -n "${BOOT_MOUNT}" ]] && umount -lf "${BOOT_MOUNT}" 2>/dev/null || true
+    umount -lf "${TARGET_MOUNT}/run" 2>/dev/null || true
+    umount -lf "${TARGET_MOUNT}/sys" 2>/dev/null || true
+    umount -lf "${TARGET_MOUNT}/proc" 2>/dev/null || true
+    umount -lf "${TARGET_MOUNT}/dev/pts" 2>/dev/null || true
+    umount -lf "${TARGET_MOUNT}/dev" 2>/dev/null || true
+    if (( EFI_MOUNTED )); then
+        umount -lf "${TARGET_MOUNT}/boot/efi" 2>/dev/null || true
+    fi
+    if (( BOOT_MOUNTED )); then
+        umount -lf "${TARGET_MOUNT}/boot" 2>/dev/null || true
+    fi
+    if (( STATE_MOUNTED )); then
+        umount -lf "${TARGET_MOUNT}/var" 2>/dev/null || true
+    fi
     umount -lf "${TARGET_MOUNT}" 2>/dev/null || true
-    [[ -n "${ACTIVE_MOUNT}" ]] && umount -lf "${ACTIVE_MOUNT}" 2>/dev/null || true
-    [[ -n "${BOOT_MOUNT}" ]] && rmdir "${BOOT_MOUNT}" 2>/dev/null || true
-    [[ -n "${ACTIVE_MOUNT}" ]] && rmdir "${ACTIVE_MOUNT}" 2>/dev/null || true
+    if [[ -n "${STAGING_MOUNT}" ]]; then
+        umount -lf "${STAGING_MOUNT}" 2>/dev/null || true
+        rmdir "${STAGING_MOUNT}" 2>/dev/null || true
+    fi
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -51,250 +57,129 @@ require_on_target_disk() {
     [[ "${parent}" == "${TARGET_DISK}" ]] || error "${dev} does not belong to selected disk ${TARGET_DISK}"
 }
 
-uuid_of() {
-    blkid -s UUID -o value "$1"
-}
-
 label_device() {
     blkid -L "$1" 2>/dev/null || true
 }
 
-root_slot_device() {
-    local label="$1" legacy_label="$2" dev
-    dev="$(label_device "${label}")"
+resolve_partition() {
+    local part_name="$1" legacy_label="$2" dev
+    dev="$(label_device "${part_name}")"
     [[ -n "${dev}" ]] || dev="$(label_device "${legacy_label}")"
     printf '%s\n' "${dev}"
 }
 
-read_default_slot() {
-    local grubenv="${BOOT_MOUNT}/grub/grubenv" slot=""
-    if [[ -f "${grubenv}" ]]; then
-        slot="$(sed -n 's/^saved_entry=dayshield-\([ab]\)$/\1/p' "${grubenv}" | tail -n1)"
-    fi
-    [[ -n "${slot}" ]] || slot="a"
-    printf '%s\n' "${slot}"
-}
-
-copy_persistent_path() {
-    local path="$1" rel parent
-    rel="${path#/}"
-    [[ -e "${ACTIVE_MOUNT}/${rel}" ]] || return 0
-    rm -rf "${TARGET_MOUNT:?}/${rel}"
-    parent="$(dirname "${TARGET_MOUNT}/${rel}")"
-    mkdir -p "${parent}"
-    cp -a "${ACTIVE_MOUNT}/${rel}" "${parent}/"
-}
-
-copy_persistent_state() {
-    local path
-    for path in \
-        /etc/dayshield \
-        /etc/wireguard \
-        /etc/cloudflared \
-        /etc/hostname \
-        /etc/hosts \
-        /etc/machine-id \
-        /etc/ssh \
-        /etc/systemd/network \
-        /var/lib/dayshield \
-        /var/lib/cloudflared
-    do
-        copy_persistent_path "${path}"
-    done
-    rm -rf \
-        "${TARGET_MOUNT}/var/lib/dayshield/update-staging" \
-        "${TARGET_MOUNT}/var/lib/dayshield/update/rootfs-slot"
-}
-
-find_latest_boot_file() {
-    local dir="$1" prefix="$2" exact="$3" candidate=""
-    if [[ -e "${dir}/${exact}" ]]; then
-        printf '%s\n' "${dir}/${exact}"
-        return 0
-    fi
-    candidate="$(find "${dir}" -maxdepth 1 -name "${prefix}*" | sort | tail -n1)"
-    [[ -n "${candidate}" ]] || return 1
-    printf '%s\n' "${candidate}"
-}
-
-install_slot_boot_files() {
-    local slot="$1" source_boot="$2" dest="${BOOT_MOUNT}/dayshield/slot-${slot}"
-    local kernel initrd
-    kernel="$(find_latest_boot_file "${source_boot}" "vmlinuz-" "vmlinuz")"
-    initrd="$(find_latest_boot_file "${source_boot}" "initrd.img-" "initrd.img")"
-    mkdir -p "${dest}"
-    cp "${kernel}" "${dest}/vmlinuz"
-    cp "${initrd}" "${dest}/initrd.img"
-}
-
-ensure_active_boot_files() {
-    local slot="$1"
-    if [[ -f "${BOOT_MOUNT}/dayshield/slot-${slot}/vmlinuz" && -f "${BOOT_MOUNT}/dayshield/slot-${slot}/initrd.img" ]]; then
-        return 0
-    fi
-    install_slot_boot_files "${slot}" "${BOOT_MOUNT}" || warn "Could not refresh existing slot-${slot} boot files"
-}
-
-write_fstab() {
-    local root_uuid boot_uuid efi_uuid
-    root_uuid="$(uuid_of "${INACTIVE_DEV}")"
-    boot_uuid="$(uuid_of "${BOOT_DEV}")"
-    efi_uuid="$(uuid_of "${EFI_DEV}" 2>/dev/null || true)"
-    [[ -n "${root_uuid}" && -n "${boot_uuid}" ]] || error "Failed to resolve root/boot UUIDs after formatting"
-    {
-        echo "# /etc/fstab - generated by DayShield ISO rootfs upgrade"
-        echo "UUID=${root_uuid}  /          ext4  defaults,noatime  0  1"
-        echo "UUID=${boot_uuid}  /boot      ext4  defaults,noatime  0  2"
-        if [[ -n "${efi_uuid}" ]]; then
-            echo "UUID=${efi_uuid}   /boot/efi  vfat  umask=0077        0  2"
+resolve_efi_partition() {
+    local efi_dev
+    efi_dev="$(lsblk -nr -o NAME,PARTTYPE "${TARGET_DISK}" 2>/dev/null \
+        | awk 'tolower($2) ~ /c12a7328-f81f-11d2-ba4b-00a0c93ec93b|ef00/ { print "/dev/" $1; exit }')"
+    if [[ -z "${efi_dev}" ]]; then
+        if [[ "${TARGET_DISK}" =~ (nvme|mmcblk) ]]; then
+            efi_dev="${TARGET_DISK}p2"
         else
-            echo "${EFI_DEV}   /boot/efi  vfat  umask=0077        0  2"
+            efi_dev="${TARGET_DISK}2"
         fi
-        echo "tmpfs              /tmp       tmpfs defaults           0  0"
-    } > "${TARGET_MOUNT}/etc/fstab"
+    fi
+    printf '%s\n' "${efi_dev}"
 }
 
-write_iso_marker() {
-    local prepared_at
-    prepared_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    mkdir -p "${TARGET_MOUNT}/etc/dayshield/config"
-    cat > "${TARGET_MOUNT}/etc/dayshield/config/rootfs-iso-upgrade.json" <<EOF
+detect_staging_ostree_ref() {
+    local ref
+    ref="${DAYSHIELD_OSTREE_REF:-}"
+    if [[ -n "${ref}" ]]; then
+        printf '%s\n' "${ref}"
+        return 0
+    fi
+    ref="$(ostree --repo="${STAGING_MOUNT}/ostree/repo" refs --list 2>/dev/null | head -n1 || true)"
+    printf '%s\n' "${ref}"
+}
+
+stage_ostree_upgrade() {
+    local osname ref
+    osname="${DAYSHIELD_OSTREE_OSNAME:-dayshield}"
+    ref="$(detect_staging_ostree_ref)"
+    [[ -n "${ref}" ]] || error "Could not determine OSTree ref from staged ISO rootfs. Set DAYSHIELD_OSTREE_REF."
+
+    info "Pulling staged OSTree commit '${ref}' into target sysroot ..."
+    ostree --repo="${TARGET_MOUNT}/ostree/repo" pull-local "${STAGING_MOUNT}/ostree/repo" "${ref}"
+
+    info "Ensuring stateroot '${osname}' exists ..."
+    if ! ostree admin --sysroot="${TARGET_MOUNT}" os-init "${osname}" 2>/dev/null; then
+        info "Stateroot '${osname}' already initialized."
+    fi
+
+    info "Deploying staged OSTree ref '${ref}' for next boot ..."
+    ostree admin --sysroot="${TARGET_MOUNT}" deploy --os="${osname}" "${ref}"
+
+    mkdir -p "${TARGET_MOUNT}/var/lib/dayshield/update"
+    cat > "${TARGET_MOUNT}/var/lib/dayshield/update/ostree-iso-stage.json" <<EOF
 {
   "status": "staged",
-  "targetSlot": "${INACTIVE_SLOT}",
-  "previousSlot": "${ACTIVE_SLOT}",
-  "targetVersion": "iso",
-  "preparedAt": "${prepared_at}",
-  "bootedAt": null,
-  "confirmedAt": null,
-  "lastError": null
+  "ref": "${ref}",
+  "osname": "${osname}",
+  "source": "iso",
+  "preparedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 }
 EOF
-}
-
-write_grub_config() {
-    local boot_uuid root_a_uuid root_b_uuid
-    boot_uuid="$(uuid_of "${BOOT_DEV}")"
-    root_a_uuid="$(uuid_of "${ROOT_A_DEV}")"
-    root_b_uuid="$(uuid_of "${ROOT_B_DEV}")"
-    mkdir -p "${TARGET_MOUNT}/etc/grub.d" "${TARGET_MOUNT}/boot/grub"
-    cat > "${TARGET_MOUNT}/etc/grub.d/09_dayshield_ab" <<EOF
-#!/bin/sh
-set -e
-cat <<'GRUB_EOF'
-menuentry 'DayShield Primary System' --id 'dayshield-a' {
-    search --no-floppy --fs-uuid --set=root ${boot_uuid}
-    linux /dayshield/slot-a/vmlinuz root=UUID=${root_a_uuid} ro quiet splash
-    initrd /dayshield/slot-a/initrd.img
-}
-
-menuentry 'DayShield Secondary System' --id 'dayshield-b' {
-    search --no-floppy --fs-uuid --set=root ${boot_uuid}
-    linux /dayshield/slot-b/vmlinuz root=UUID=${root_b_uuid} ro quiet splash
-    initrd /dayshield/slot-b/initrd.img
-}
-GRUB_EOF
-EOF
-    chmod 755 "${TARGET_MOUNT}/etc/grub.d/09_dayshield_ab"
-    cat > "${TARGET_MOUNT}/etc/default/grub" <<'EOF'
-GRUB_DEFAULT=saved
-GRUB_SAVEDEFAULT=false
-GRUB_TIMEOUT=5
-GRUB_DISTRIBUTOR="DayShield"
-GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
-GRUB_CMDLINE_LINUX=""
-GRUB_TERMINAL_INPUT=console
-GRUB_GFXMODE=auto
-EOF
-}
-
-schedule_trial_boot() {
-    local entry="dayshield-${INACTIVE_SLOT}"
-    chroot "${TARGET_MOUNT}" grub-mkconfig -o /boot/grub/grub.cfg
-    if chroot "${TARGET_MOUNT}" command -v grub-reboot >/dev/null 2>&1; then
-        chroot "${TARGET_MOUNT}" grub-reboot "${entry}"
-    elif command -v grub-editenv >/dev/null 2>&1; then
-        grub-editenv "${TARGET_MOUNT}/boot/grub/grubenv" set next_entry="${entry}"
-    else
-        error "grub-reboot/grub-editenv not found"
-    fi
 }
 
 [[ -b "${TARGET_DISK}" ]] || error "Not a block device: ${TARGET_DISK}"
 [[ -f "${SQUASHFS_IMG}" ]] || error "Rootfs squashfs not found: ${SQUASHFS_IMG}"
+command -v ostree >/dev/null 2>&1 || error "ostree CLI is required in the live environment for upgrade mode."
 
-ROOT_A_DEV="$(root_slot_device DS_PRIMARY DAYSHIELD_ROOT_A)"
-ROOT_B_DEV="$(root_slot_device DS_SECONDARY DAYSHIELD_ROOT_B)"
-BOOT_DEV="$(blkid -L DAYSHIELD_BOOT 2>/dev/null || true)"
-[[ -n "${ROOT_A_DEV}" && -n "${ROOT_B_DEV}" && -n "${BOOT_DEV}" ]] || \
-    error "No DayShield Primary/Secondary installation found. ISO upgrade requires an existing Primary/Secondary appliance."
-require_on_target_disk "${ROOT_A_DEV}"
-require_on_target_disk "${ROOT_B_DEV}"
-require_on_target_disk "${BOOT_DEV}"
+ROOT_DEV="$(resolve_partition DS_SYSROOT DS_PRIMARY)"
+BOOT_DEV="$(resolve_partition DAYSHIELD_BOOT DAYSHIELD_BOOT)"
+STATE_DEV="$(resolve_partition DS_STATE DAYSHIELD_STATE)"
+EFI_DEV="$(resolve_efi_partition)"
 
-EFI_DEV="$(lsblk -nr -o NAME,PARTTYPE "${TARGET_DISK}" 2>/dev/null | awk 'tolower($2) ~ /c12a7328-f81f-11d2-ba4b-00a0c93ec93b|ef00/ { print "/dev/" $1; exit }')"
-if [[ -z "${EFI_DEV}" ]]; then
-    if [[ "${TARGET_DISK}" =~ (nvme|mmcblk) ]]; then
-        EFI_DEV="${TARGET_DISK}p2"
-    else
-        EFI_DEV="${TARGET_DISK}2"
-    fi
-fi
+[[ -n "${ROOT_DEV}" && -n "${BOOT_DEV}" ]] || \
+    error "No compatible DayShield OSTree layout found. Expected DS_SYSROOT and DAYSHIELD_BOOT labels."
 [[ -b "${EFI_DEV}" ]] || error "EFI partition not found on ${TARGET_DISK}"
 
-ACTIVE_MOUNT="$(mktemp -d)"
-BOOT_MOUNT="$(mktemp -d)"
-
-info "Detecting active DayShield rootfs slot ..."
-mount "${BOOT_DEV}" "${BOOT_MOUNT}"
-ACTIVE_SLOT="$(read_default_slot)"
-case "${ACTIVE_SLOT}" in
-    a) ACTIVE_DEV="${ROOT_A_DEV}"; INACTIVE_SLOT="b"; INACTIVE_DEV="${ROOT_B_DEV}"; INACTIVE_LABEL="DS_SECONDARY" ;;
-    b) ACTIVE_DEV="${ROOT_B_DEV}"; INACTIVE_SLOT="a"; INACTIVE_DEV="${ROOT_A_DEV}"; INACTIVE_LABEL="DS_PRIMARY" ;;
-    *) error "Invalid active slot detected: ${ACTIVE_SLOT}" ;;
-esac
-umount "${BOOT_MOUNT}"
-info "Active slot: ${ACTIVE_SLOT}; staging ISO rootfs to slot ${INACTIVE_SLOT}."
-
-info "Mounting active rootfs slot read-only ..."
-mount -o ro "${ACTIVE_DEV}" "${ACTIVE_MOUNT}"
-
-info "Formatting inactive rootfs slot ${INACTIVE_SLOT} ..."
-mkfs.ext4 -F -L "${INACTIVE_LABEL}" "${INACTIVE_DEV}"
+require_on_target_disk "${ROOT_DEV}"
+require_on_target_disk "${BOOT_DEV}"
+require_on_target_disk "${EFI_DEV}"
+if [[ -n "${STATE_DEV}" ]]; then
+    require_on_target_disk "${STATE_DEV}"
+fi
 
 mkdir -p "${TARGET_MOUNT}"
-mount "${INACTIVE_DEV}" "${TARGET_MOUNT}"
+mount "${ROOT_DEV}" "${TARGET_MOUNT}"
 
-info "Extracting ISO rootfs into inactive slot ..."
-"${INSTALLER_DIR}/copy-rootfs.sh" "${SQUASHFS_IMG}" "${TARGET_MOUNT}"
-
-info "Copying persistent configuration and state ..."
-copy_persistent_state
-mkdir -p "${TARGET_MOUNT}/etc/dayshield"
-printf '%s\n' "${INACTIVE_SLOT}" > "${TARGET_MOUNT}/etc/dayshield/rootfs-slot"
-write_fstab
-write_iso_marker
-
-info "Installing inactive-slot kernel and initramfs into shared boot ..."
-mount "${BOOT_DEV}" "${BOOT_MOUNT}"
-ensure_active_boot_files "${ACTIVE_SLOT}"
-install_slot_boot_files "${INACTIVE_SLOT}" "${TARGET_MOUNT}/boot"
-umount "${BOOT_MOUNT}"
-
-info "Preparing target chroot ..."
 mkdir -p "${TARGET_MOUNT}/boot"
 mount "${BOOT_DEV}" "${TARGET_MOUNT}/boot"
+BOOT_MOUNTED=1
+
 mkdir -p "${TARGET_MOUNT}/boot/efi"
 mount "${EFI_DEV}" "${TARGET_MOUNT}/boot/efi"
+EFI_MOUNTED=1
+
+if [[ -n "${STATE_DEV}" ]]; then
+    mkdir -p "${TARGET_MOUNT}/var"
+    mount "${STATE_DEV}" "${TARGET_MOUNT}/var"
+    STATE_MOUNTED=1
+fi
+
+STAGING_MOUNT="$(mktemp -d)"
+mount -t tmpfs -o size=3G none "${STAGING_MOUNT}"
+
+info "Extracting ISO rootfs to temporary staging area ..."
+"${INSTALLER_DIR}/copy-rootfs.sh" "${SQUASHFS_IMG}" "${STAGING_MOUNT}"
+[[ -d "${STAGING_MOUNT}/ostree/repo" ]] || error "Staged rootfs does not contain /ostree/repo."
+[[ -d "${TARGET_MOUNT}/ostree/repo" ]] || error "Target sysroot does not contain /ostree/repo."
+
+if [[ -n "${STATE_DEV}" ]] && [[ -d "${STAGING_MOUNT}/var" ]]; then
+    rsync -aHAX --numeric-ids "${STAGING_MOUNT}/var/" "${TARGET_MOUNT}/var/"
+fi
+
 for _fs in dev dev/pts proc sys run; do
     mkdir -p "${TARGET_MOUNT}/${_fs}"
     mount --bind "/${_fs}" "${TARGET_MOUNT}/${_fs}"
 done
 
-info "Regenerating GRUB menu and scheduling trial boot ..."
-write_grub_config
-schedule_trial_boot
+stage_ostree_upgrade
+
+info "Regenerating GRUB menu for staged deployment ..."
+chroot "${TARGET_MOUNT}" grub-mkconfig -o /boot/grub/grub.cfg
 
 sync
-info "ISO rootfs upgrade staged successfully."
-info "Next reboot will trial boot slot ${INACTIVE_SLOT}; DayShield will confirm health or roll back to slot ${ACTIVE_SLOT}."
+info "OSTree upgrade staged successfully. Reboot to boot the new deployment."

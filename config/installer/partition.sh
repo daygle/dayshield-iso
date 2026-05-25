@@ -5,8 +5,8 @@
 #   Partition 1: BIOS boot partition (1 MiB, bios_grub)
 #   Partition 2: EFI System Partition (512 MiB, FAT32)
 #   Partition 3: Shared boot partition (1 GiB, ext4)
-#   Partition 4: Primary rootfs slot (roughly half remaining disk, ext4)
-#   Partition 5: Secondary rootfs slot (roughly half remaining disk, ext4)
+#   Partition 4: OSTree sysroot partition (remaining disk minus state partition, ext4)
+#   Partition 5: Persistent writable state partition (/var, fixed size 8 GiB, ext4)
 #
 # Usage: partition.sh <disk>  e.g. partition.sh /dev/sda
 
@@ -15,6 +15,13 @@ set -euo pipefail
 DISK="${1:?"Usage: partition.sh <disk>"}"
 
 [[ -b "${DISK}" ]] || { echo "ERROR: Not a block device: ${DISK}" >&2; exit 1; }
+
+DISK_SIZE_MIB="$(( $(blockdev --getsize64 "${DISK}") / 1024 / 1024 ))"
+MIN_DISK_SIZE_MIB=11264  # 11 GiB minimum: EFI+boot+sysroot+8GiB state
+if (( DISK_SIZE_MIB < MIN_DISK_SIZE_MIB )); then
+    echo "ERROR: ${DISK} is too small (${DISK_SIZE_MIB} MiB). Need at least ${MIN_DISK_SIZE_MIB} MiB." >&2
+    exit 1
+fi
 
 echo "--> Wiping existing partition table on ${DISK} …"
 # Zero out the first and last 4 MiB to destroy existing signatures
@@ -31,8 +38,8 @@ parted --script "${DISK}" \
     mkpart "EFI"  fat32  2MiB   514MiB \
     set 2 esp on \
     mkpart "BOOT" ext4   514MiB 1538MiB \
-    mkpart "PRIMARY_ROOTFS" ext4 1538MiB 50% \
-    mkpart "SECONDARY_ROOTFS" ext4 50% 100%
+    mkpart "SYSROOT" ext4 1538MiB -8192MiB \
+    mkpart "STATE" ext4 -8192MiB 100%
 
 # Inform the kernel of the new partition table
 partprobe "${DISK}" 2>/dev/null || true

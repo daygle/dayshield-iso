@@ -22,7 +22,7 @@ INSTALL_WAN_IFACE=""
 INSTALL_LAN_IFACE=""
 INSTALL_MODE="${DAYSHIELD_INSTALL_MODE:-}"
 ISO_SCAN_MOUNT=""
-ROOT_B_MOUNT=""
+HAS_OSTREE_REPO=0
 
 # Redirect output to log
 exec > >(tee -a "${LOG_FILE}") 2>&1
@@ -51,12 +51,9 @@ cleanup_all_mounts() {
         rmdir "${ISO_SCAN_MOUNT}" 2>/dev/null || true
         ISO_SCAN_MOUNT=""
     fi
-    if [[ -n "${ROOT_B_MOUNT}" ]]; then
-        umount -lf "${ROOT_B_MOUNT}" 2>/dev/null || true
-        rmdir "${ROOT_B_MOUNT}" 2>/dev/null || true
-        ROOT_B_MOUNT=""
-    fi
     umount -lf "${TARGET_MOUNT}/boot/efi" 2>/dev/null || true
+    umount -lf "${TARGET_MOUNT}/boot" 2>/dev/null || true
+    umount -lf "${TARGET_MOUNT}/var" 2>/dev/null || true
     umount -lf "${TARGET_MOUNT}" 2>/dev/null || true
 }
 
@@ -204,7 +201,7 @@ ipv4_to_int() {
     local ip="$1"
     local -a octets
     IFS='.' read -r -a octets <<< "${ip}"
-    printf '%u\n' "$(( (${octets[0]} << 24) | (${octets[1]} << 16) | (${octets[2]} << 8) | ${octets[3]} ))"
+    printf '%u\n' "$(( (octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3] ))"
 }
 
 int_to_ipv4() {
@@ -304,31 +301,53 @@ validate_lan_runtime_config() {
         error "DHCP range must not include the LAN gateway address ${LAN_IP}."
 }
 
-seed_inactive_root_slot() {
-    local root_b_uuid
+bootstrap_state_partition() {
+    local state_part="$1" state_mount
 
-    ROOT_B_MOUNT="$(mktemp -d)"
-    mount "${ROOT_B_PART}" "${ROOT_B_MOUNT}"
+    state_mount="$(mktemp -d)"
+    mount "${state_part}" "${state_mount}"
 
-    info "Seeding secondary rootfs slot from configured primary slot ..."
-    tar -C "${TARGET_MOUNT}" --one-file-system -cpf - . | tar -C "${ROOT_B_MOUNT}" -xpf -
+    if [[ -d "${TARGET_MOUNT}/var" ]]; then
+        info "Bootstrapping persistent /var state partition ..."
+        if command -v rsync >/dev/null 2>&1; then
+            rsync -aHAX --numeric-ids "${TARGET_MOUNT}/var/" "${state_mount}/"
+        else
+            tar -C "${TARGET_MOUNT}/var" -cpf - . | tar -C "${state_mount}" -xpf -
+        fi
+    fi
 
-    mkdir -p \
-        "${ROOT_B_MOUNT}/boot" \
-        "${ROOT_B_MOUNT}/dev" \
-        "${ROOT_B_MOUNT}/proc" \
-        "${ROOT_B_MOUNT}/sys" \
-        "${ROOT_B_MOUNT}/run" \
-        "${ROOT_B_MOUNT}/etc/dayshield"
+    mkdir -p "${state_mount}/lib/dayshield"
+    umount "${state_mount}"
+    rmdir "${state_mount}"
+}
 
-    root_b_uuid="$(blkid -s UUID -o value "${ROOT_B_PART}")"
-    sed -i "s/UUID=${ROOT_UUID}  \\/ /UUID=${root_b_uuid}  \\/ /" "${ROOT_B_MOUNT}/etc/fstab"
-    printf 'b\n' > "${ROOT_B_MOUNT}/etc/dayshield/rootfs-slot"
+stage_ostree_seed_if_present() {
+    local target="$1"
+    local osname ref
 
-    sync
-    umount "${ROOT_B_MOUNT}"
-    rmdir "${ROOT_B_MOUNT}"
-    ROOT_B_MOUNT=""
+    [[ -d "${target}/ostree/repo" ]] || return 0
+
+    if ! command -v ostree >/dev/null 2>&1; then
+        warn "ostree CLI is unavailable in live environment; skipping OSTree deployment staging."
+        return 0
+    fi
+
+    osname="${DAYSHIELD_OSTREE_OSNAME:-dayshield}"
+    ref="${DAYSHIELD_OSTREE_REF:-}"
+    if [[ -z "${ref}" ]]; then
+        ref="$(ostree --repo="${target}/ostree/repo" refs --list 2>/dev/null | head -n1 || true)"
+    fi
+
+    if [[ -z "${ref}" ]]; then
+        warn "OSTree repo present but no refs discovered; skipping deployment staging."
+        return 0
+    fi
+
+    info "Staging OSTree deployment '${ref}' for stateroot '${osname}' ..."
+    if ! ostree admin --sysroot="${target}" os-init "${osname}" 2>/dev/null; then
+        info "OSTree stateroot '${osname}' already initialized."
+    fi
+    ostree admin --sysroot="${target}" deploy --os="${osname}" "${ref}"
 }
 
 SQUASHFS_IMG="$(find_squashfs_image || true)"
@@ -495,7 +514,7 @@ choose_install_mode() {
 
     echo ""
     echo "DayShield ISO options:"
-    echo "  [1] Upgrade from ISO   - stage this ISO rootfs into the inactive Primary/Secondary slot"
+    echo "  [1] Upgrade from ISO   - stage this ISO OSTree deployment on an existing DayShield install"
     echo "  [2] Reinstall from ISO - erase the selected disk and install fresh"
     while true; do
         read -rp "Select mode [1-2]: " _mode
@@ -535,7 +554,7 @@ choose_install_mode
 
 if [[ "${INSTALL_MODE}" == "upgrade" ]]; then
     info "Upgrading existing DayShield appliance on ${TARGET_DISK} from ISO"
-    info "The inactive Primary/Secondary rootfs slot will be replaced; the active slot remains available for rollback."
+    info "An OSTree deployment from this ISO will be staged for the next boot."
     if [[ "${DAYSHIELD_UNATTENDED:-}" != "1" ]]; then
         read -rp "Type '${TARGET_DISK}' to stage ISO upgrade: " confirm
         [[ "${confirm}" == "${TARGET_DISK}" ]] || error "Upgrade cancelled."
@@ -574,13 +593,13 @@ info "Partitioning ${TARGET_DISK} …"
 if [[ "${TARGET_DISK}" =~ (nvme|mmcblk) ]]; then
     EFI_PART="${TARGET_DISK}p2"
     BOOT_PART="${TARGET_DISK}p3"
-    ROOT_PART="${TARGET_DISK}p4"
-    ROOT_B_PART="${TARGET_DISK}p5"
+    SYSROOT_PART="${TARGET_DISK}p4"
+    STATE_PART="${TARGET_DISK}p5"
 else
     EFI_PART="${TARGET_DISK}2"
     BOOT_PART="${TARGET_DISK}3"
-    ROOT_PART="${TARGET_DISK}4"
-    ROOT_B_PART="${TARGET_DISK}5"
+    SYSROOT_PART="${TARGET_DISK}4"
+    STATE_PART="${TARGET_DISK}5"
 fi
 
 # ---------------------------------------------------------------------------
@@ -588,8 +607,8 @@ fi
 # ---------------------------------------------------------------------------
 [[ -b "${EFI_PART}" ]]  || error "EFI partition device not found: ${EFI_PART}"
 [[ -b "${BOOT_PART}" ]] || error "Boot partition device not found: ${BOOT_PART}"
-[[ -b "${ROOT_PART}" ]] || error "Root partition device not found: ${ROOT_PART}"
-[[ -b "${ROOT_B_PART}" ]] || error "Secondary rootfs partition device not found: ${ROOT_B_PART}"
+[[ -b "${SYSROOT_PART}" ]] || error "Sysroot partition device not found: ${SYSROOT_PART}"
+[[ -b "${STATE_PART}" ]] || error "State partition device not found: ${STATE_PART}"
 
 info "Formatting EFI partition: ${EFI_PART}"
 mkfs.fat -F 32 -n "DS_EFI" "${EFI_PART}"
@@ -597,17 +616,17 @@ mkfs.fat -F 32 -n "DS_EFI" "${EFI_PART}"
 info "Formatting shared boot partition: ${BOOT_PART}"
 mkfs.ext4 -F -L "DAYSHIELD_BOOT" "${BOOT_PART}"
 
-info "Formatting primary rootfs slot: ${ROOT_PART}"
-mkfs.ext4 -F -L "DS_PRIMARY" "${ROOT_PART}"
+info "Formatting OSTree sysroot partition: ${SYSROOT_PART}"
+mkfs.ext4 -F -L "DS_SYSROOT" "${SYSROOT_PART}"
 
-info "Formatting secondary rootfs slot: ${ROOT_B_PART}"
-mkfs.ext4 -F -L "DS_SECONDARY" "${ROOT_B_PART}"
+info "Formatting persistent state partition: ${STATE_PART}"
+mkfs.ext4 -F -L "DS_STATE" "${STATE_PART}"
 
 # ---------------------------------------------------------------------------
 # Mount
 # ---------------------------------------------------------------------------
 mkdir -p "${TARGET_MOUNT}"
-mount "${ROOT_PART}" "${TARGET_MOUNT}"
+mount "${SYSROOT_PART}" "${TARGET_MOUNT}"
 mkdir -p "${TARGET_MOUNT}/boot"
 mount "${BOOT_PART}" "${TARGET_MOUNT}/boot"
 mkdir -p "${TARGET_MOUNT}/boot/efi"
@@ -618,6 +637,11 @@ mount "${EFI_PART}" "${TARGET_MOUNT}/boot/efi"
 # ---------------------------------------------------------------------------
 info "Extracting rootfs squashfs …"
 "${INSTALLER_DIR}/copy-rootfs.sh" "${SQUASHFS_IMG}" "${TARGET_MOUNT}"
+bootstrap_state_partition "${STATE_PART}"
+mount "${STATE_PART}" "${TARGET_MOUNT}/var"
+if [[ -d "${TARGET_MOUNT}/ostree/repo" ]]; then
+    HAS_OSTREE_REPO=1
+fi
 
 # ---------------------------------------------------------------------------
 # Clean live-boot artefacts from the installed target
@@ -628,42 +652,48 @@ for _fs in dev dev/pts proc sys run; do
     mount --bind "/${_fs}" "${TARGET_MOUNT}/${_fs}"
 done
 
-info "Purging live-boot / live-config packages from target …"
-chroot "${TARGET_MOUNT}" /bin/sh -c 'dpkg --configure -a 2>/dev/null || true'
-chroot "${TARGET_MOUNT}" /bin/sh -c \
-    'DEBIAN_FRONTEND=noninteractive apt-get -y --purge remove \
-        live-boot live-boot-initramfs-tools \
-        live-config live-config-systemd live-config-sysvinit \
-        live-tools 2>/dev/null || true'
+if (( HAS_OSTREE_REPO )); then
+    stage_ostree_seed_if_present "${TARGET_MOUNT}"
+else
+    info "Purging live-boot / live-config packages from target …"
+    chroot "${TARGET_MOUNT}" /bin/sh -c 'dpkg --configure -a 2>/dev/null || true'
+    chroot "${TARGET_MOUNT}" /bin/sh -c \
+        'DEBIAN_FRONTEND=noninteractive apt-get -y --purge remove \
+            live-boot live-boot-initramfs-tools \
+            live-config live-config-systemd live-config-sysvinit \
+            live-tools 2>/dev/null || true'
 
-# Remove any leftover live directories not caught by the package purge
-info "Removing leftover live directories …"
-rm -rf \
-    "${TARGET_MOUNT}/lib/live" \
-    "${TARGET_MOUNT}/usr/lib/live" \
-    "${TARGET_MOUNT}/etc/live"
+    # Remove any leftover live directories not caught by the package purge
+    info "Removing leftover live directories …"
+    rm -rf \
+        "${TARGET_MOUNT}/lib/live" \
+        "${TARGET_MOUNT}/usr/lib/live" \
+        "${TARGET_MOUNT}/etc/live"
 
-# Regenerate a clean initramfs without live-boot hooks
-info "Regenerating initramfs inside target …"
-chroot "${TARGET_MOUNT}" update-initramfs -u -k all
+    # Regenerate a clean initramfs without live-boot hooks
+    info "Regenerating initramfs inside target …"
+    chroot "${TARGET_MOUNT}" update-initramfs -u -k all
+fi
 
 FINALIZE_SCRIPT="${TARGET_MOUNT}/usr/local/lib/dayshield/installer-finalize.sh"
-[[ -x "${FINALIZE_SCRIPT}" ]] || error "Missing installer finalization helper in target rootfs: ${FINALIZE_SCRIPT}"
-
-info "Applying runtime configuration contracts via installer finalization helper …"
-"${FINALIZE_SCRIPT}" \
-    "${TARGET_MOUNT}" \
-    "${INSTALL_HOSTNAME}" \
-    "${INSTALL_ROOT_PASSWORD}" \
-    "${INSTALL_WAN_IFACE}" \
-    "dhcp" \
-    "" \
-    "" \
-    "${INSTALL_LAN_IFACE}" \
-    "${LAN_IP}" \
-    "${LAN_PREFIX}" \
-    "${LAN_DHCP_START}" \
-    "${LAN_DHCP_END}"
+if [[ -x "${FINALIZE_SCRIPT}" ]]; then
+    info "Applying runtime configuration contracts via installer finalization helper …"
+    "${FINALIZE_SCRIPT}" \
+        "${TARGET_MOUNT}" \
+        "${INSTALL_HOSTNAME}" \
+        "${INSTALL_ROOT_PASSWORD}" \
+        "${INSTALL_WAN_IFACE}" \
+        "dhcp" \
+        "" \
+        "" \
+        "${INSTALL_LAN_IFACE}" \
+        "${LAN_IP}" \
+        "${LAN_PREFIX}" \
+        "${LAN_DHCP_START}" \
+        "${LAN_DHCP_END}"
+else
+    warn "Installer finalization helper not found in target rootfs: ${FINALIZE_SCRIPT}"
+fi
 unset INSTALL_ROOT_PASSWORD
 
 cleanup_chroot_mounts
@@ -680,19 +710,25 @@ truncate -s 0 "${TARGET_MOUNT}/etc/machine-id"
 
 # Write fstab
 info "Writing /etc/fstab …"
-ROOT_UUID="$(blkid -s UUID -o value "${ROOT_PART}")"
+ROOT_UUID="$(blkid -s UUID -o value "${SYSROOT_PART}")"
 BOOT_UUID="$(blkid -s UUID -o value "${BOOT_PART}")"
 EFI_UUID="$(blkid -s UUID -o value "${EFI_PART}")"
+STATE_UUID="$(blkid -s UUID -o value "${STATE_PART}")"
+ROOT_MOUNT_OPTS="defaults,noatime"
+if (( HAS_OSTREE_REPO )); then
+    ROOT_MOUNT_OPTS="${ROOT_MOUNT_OPTS},ro"
+fi
 cat > "${TARGET_MOUNT}/etc/fstab" <<EOF
 # /etc/fstab - generated by DayShield installer
-UUID=${ROOT_UUID}  /          ext4  defaults,noatime  0  1
+UUID=${ROOT_UUID}  /          ext4  ${ROOT_MOUNT_OPTS}  0  1
 UUID=${BOOT_UUID}  /boot      ext4  defaults,noatime  0  2
 UUID=${EFI_UUID}   /boot/efi  vfat  umask=0077        0  2
+UUID=${STATE_UUID} /var       ext4  defaults,noatime  0  2
 tmpfs              /tmp       tmpfs defaults           0  0
 EOF
 
 mkdir -p "${TARGET_MOUNT}/etc/dayshield"
-printf 'a\n' > "${TARGET_MOUNT}/etc/dayshield/rootfs-slot"
+printf 'ostree\n' > "${TARGET_MOUNT}/etc/dayshield/rootfs-slot"
 
 # ---------------------------------------------------------------------------
 # Enable systemd-networkd on the target by creating the
@@ -751,8 +787,6 @@ install -m 644 "${INSTALLER_DIR}/firstboot.service" \
     "${SYSTEMD_DIR}/firstboot.service"
 ln -sf "/etc/systemd/system/firstboot.service" \
     "${SYSTEMD_DIR}/multi-user.target.wants/firstboot.service"
-
-seed_inactive_root_slot
 
 # ---------------------------------------------------------------------------
 # Unmount

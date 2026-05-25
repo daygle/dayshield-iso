@@ -361,8 +361,8 @@ available) or from another machine on the same network.
 Installation steps:
 
 1. **Select disk** - choose target installation disk
-2. **Partition** - creates GPT layout: 1 MiB bios_grub + 512 MiB EFI + 1 GiB shared `/boot` + primary rootfs + secondary rootfs
-3. **Format** - FAT32 EFI, ext4 root
+2. **Partition** - creates GPT layout: 1 MiB bios_grub + 512 MiB EFI + 1 GiB shared `/boot` + OSTree sysroot + persistent state `/var`
+3. **Format** - FAT32 EFI, ext4 shared boot, ext4 `DS_SYSROOT`, ext4 `DS_STATE`
 4. **Install rootfs** - extracts the rootfs archive from the ISO to the target
 5. **Install bootloader** - GRUB BIOS + UEFI on the target disk
 6. **Configure** - hostname, root password, WAN/LAN interfaces
@@ -467,7 +467,7 @@ dayshield-iso/
 |       |-- install.sh              # CLI installer orchestrator (fallback)
 |       |-- partition.sh            # GPT disk partitioning
 |       |-- copy-rootfs.sh          # squashfs -> target filesystem copy
-|       |-- upgrade-rootfs.sh       # ISO rootfs upgrade into inactive Primary/Secondary slot
+|       |-- upgrade-rootfs.sh       # Stage ISO OSTree deployment on existing install
 |       |-- configure-bootloader.sh # Install GRUB on target disk
 |       |-- firstboot.service       # systemd unit for first-boot tasks
 |       `-- firstboot-run.sh        # First-boot script (SSH keys, machine-id...)
@@ -625,21 +625,18 @@ machine at `http://<live-ip>:8443/`.
 The live installer now offers three actions before disk selection:
 
 - **Fresh Install** installs DayShield on a blank or prepared disk.
-- **Upgrade from ISO** requires an existing DayShield Primary/Secondary appliance disk. The
-  installer formats only the inactive rootfs slot, extracts the ISO rootfs into
-  that slot, copies persistent configuration from the active slot, schedules a
-  one-shot GRUB boot into the upgraded slot, and relies on DayShield health
-  confirmation/rollback after reboot.
-- **Reinstall from ISO** erases the selected disk and creates a fresh Primary/Secondary
-  appliance layout.
+- **Upgrade from ISO** expects an existing OSTree-style DayShield install and
+  stages a new OSTree deployment from the ISO for the next reboot.
+- **Reinstall from ISO** erases the selected disk and creates a fresh OSTree
+  installer layout.
 
 ### Web UI install flow
 
 1. **Welcome** - brief overview
 2. **Disk selection** - lists available disks via `/api/detect-disks.sh`
-3. **Partition** - creates GPT layout: 1 MiB bios_grub + 512 MiB EFI + 1 GiB shared `/boot` + primary rootfs + secondary rootfs
-4. **Format** - formats the EFI partition and root slots: FAT32 EFI, ext4 shared boot, ext4 `DS_PRIMARY`, ext4 `DS_SECONDARY`
-5. **Install rootfs** - extracts `rootfs.tar.zst` from the ISO into the target root slot(s)
+3. **Partition** - creates GPT layout: 1 MiB bios_grub + 512 MiB EFI + 1 GiB shared `/boot` + `DS_SYSROOT` + `DS_STATE`
+4. **Format** - formats partitions as: FAT32 EFI, ext4 shared boot, ext4 `DS_SYSROOT`, ext4 `DS_STATE`
+5. **Install rootfs** - extracts `rootfs.tar.zst` from the ISO into sysroot and seeds the persistent `/var` state partition
 6. **Install bootloader** - installs GRUB (BIOS + UEFI) on the target disk
 7. **Configure** - hostname, root password, WAN/LAN interfaces
 8. **Finalize** - unmounts, syncs, removes installer artefacts
@@ -657,7 +654,7 @@ If the web UI cannot be used, shell installer scripts are available under
 # Specify target disk explicitly
 DAYSHIELD_TARGET_DISK=/dev/sda /usr/lib/dayshield-installer/install.sh
 
-# Stage an ISO rootfs upgrade into the inactive Primary/Secondary slot
+# Stage an ISO OSTree deployment on an existing install
 DAYSHIELD_INSTALL_MODE=upgrade \
 DAYSHIELD_TARGET_DISK=/dev/sda \
 /usr/lib/dayshield-installer/install.sh
@@ -676,6 +673,21 @@ DAYSHIELD_LAN_IFACE=enp2s0 \
 The installer sets the installed system's hostname and root password, and
 installs an SSH configuration drop-in that explicitly allows root login with
 password authentication.
+
+### OSTree assumptions and TODOs
+
+- The ISO assumes `dayshield-rootfs` can ship an OSTree repository at
+  `/ostree/repo` for deployment staging.
+- Persistent writable runtime state is expected under `/var` on `DS_STATE`; the
+  managed OS tree resides on `DS_SYSROOT`.
+- `DAYSHIELD_OSTREE_REF` and `DAYSHIELD_OSTREE_OSNAME` can be set to override
+  staged deployment selection.
+
+Production-hardening TODOs:
+
+- Add installer preflight validation for minimum OSTree/repo content and ref naming.
+- Add GPG signature verification for staged OSTree commits before deploy.
+- Add migration handling for older non-OSTree and A/B-labelled installations.
 
 ### First boot (after install)
 
