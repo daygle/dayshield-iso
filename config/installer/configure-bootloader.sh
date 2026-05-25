@@ -57,74 +57,15 @@ mkdir -p "${TARGET}/boot/efi/EFI/BOOT"
 cp "${TARGET}/boot/efi/EFI/dayshield/grubx64.efi" \
    "${TARGET}/boot/efi/EFI/BOOT/BOOTX64.EFI"
 
-find_latest_boot_file() {
-    local dir="$1" prefix="$2" exact="$3" candidate=""
-    if [[ -e "${dir}/${exact}" ]]; then
-        printf '%s\n' "${dir}/${exact}"
-        return 0
-    fi
-    candidate="$(find "${dir}" -maxdepth 1 -name "${prefix}*" | sort | tail -n1)"
-    [[ -n "${candidate}" ]] || return 1
-    printf '%s\n' "${candidate}"
-}
-
-install_slot_boot_files() {
-    local slot="$1" source_boot="$2" dest="${TARGET}/boot/dayshield/slot-${slot}"
-    local kernel initrd
-    kernel="$(find_latest_boot_file "${source_boot}" "vmlinuz-" "vmlinuz")"
-    initrd="$(find_latest_boot_file "${source_boot}" "initrd.img-" "initrd.img")"
-    mkdir -p "${dest}"
-    cp "${kernel}" "${dest}/vmlinuz"
-    cp "${initrd}" "${dest}/initrd.img"
-}
-
-label_device() {
-    blkid -L "$1" 2>/dev/null || true
-}
-
-root_slot_device() {
-    local label="$1" legacy_label="$2" dev
-    dev="$(label_device "${label}")"
-    [[ -n "${dev}" ]] || dev="$(label_device "${legacy_label}")"
-    printf '%s\n' "${dev}"
-}
-
-BOOT_UUID="$(blkid -s UUID -o value "$(blkid -L DAYSHIELD_BOOT)")"
-ROOT_A_DEV="$(root_slot_device DS_PRIMARY DAYSHIELD_ROOT_A)"
-ROOT_B_DEV="$(root_slot_device DS_SECONDARY DAYSHIELD_ROOT_B)"
-[[ -n "${ROOT_A_DEV}" && -n "${ROOT_B_DEV}" ]] || { echo "ERROR: Primary/Secondary rootfs labels were not found" >&2; exit 1; }
-ROOT_A_UUID="$(blkid -s UUID -o value "${ROOT_A_DEV}")"
-ROOT_B_UUID="$(blkid -s UUID -o value "${ROOT_B_DEV}")"
-
-echo "--> Installing DayShield Primary/Secondary boot entries ..."
-install_slot_boot_files "a" "${TARGET}/boot"
-install_slot_boot_files "b" "${TARGET}/boot"
-cat > "${TARGET}/etc/grub.d/09_dayshield_ab" <<EOF
-#!/bin/sh
-set -e
-cat <<'GRUB_EOF'
-menuentry 'DayShield Primary System' --id 'dayshield-a' {
-    search --no-floppy --fs-uuid --set=root ${BOOT_UUID}
-    linux /dayshield/slot-a/vmlinuz root=UUID=${ROOT_A_UUID} ro quiet splash
-    initrd /dayshield/slot-a/initrd.img
-}
-
-menuentry 'DayShield Secondary System' --id 'dayshield-b' {
-    search --no-floppy --fs-uuid --set=root ${BOOT_UUID}
-    linux /dayshield/slot-b/vmlinuz root=UUID=${ROOT_B_UUID} ro quiet splash
-    initrd /dayshield/slot-b/initrd.img
-}
-GRUB_EOF
-EOF
-chmod 755 "${TARGET}/etc/grub.d/09_dayshield_ab"
+echo "--> Removing legacy A/B GRUB fragment if present ..."
+rm -f "${TARGET}/etc/grub.d/09_dayshield_ab"
 
 # ---------------------------------------------------------------------------
 # Write GRUB default configuration
 # ---------------------------------------------------------------------------
 echo "--> Writing /etc/default/grub …"
 cat > "${TARGET}/etc/default/grub" <<'EOF'
-GRUB_DEFAULT=saved
-GRUB_SAVEDEFAULT=false
+GRUB_DEFAULT=0
 GRUB_TIMEOUT=5
 GRUB_DISTRIBUTOR="DayShield"
 GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
