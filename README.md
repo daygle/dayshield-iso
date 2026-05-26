@@ -687,7 +687,7 @@ Production-hardening TODOs:
 
 - Add installer preflight validation for minimum OSTree/repo content and ref naming.
 - Add GPG signature verification for staged OSTree commits before deploy.
-- Add migration handling for older non-OSTree and A/B-labelled installations.
+- Add migration handling for older pre-OSTree installations.
 
 ### First boot (after install)
 
