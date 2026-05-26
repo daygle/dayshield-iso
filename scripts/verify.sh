@@ -275,7 +275,7 @@ if ${QEMU_TEST}; then
     if ! command -v qemu-system-x86_64 &>/dev/null; then
         echo "  [SKIP] qemu-system-x86_64 not found"
     else
-        QEMU_TIMEOUT=90
+        QEMU_TIMEOUT="${QEMU_TIMEOUT:-90}"
 
         check "BIOS QEMU shows boot output" qemu_boot_probe
 

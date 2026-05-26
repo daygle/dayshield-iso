@@ -115,7 +115,6 @@ echo "    arch    : ${ARCH}"
 echo "    allow-network-fetch: ${ALLOW_NETWORK_FETCH}"
 echo "    build   : ${BUILD_DIR}"
 echo "    installer-ui: ${INSTALLER_UI_DIR}"
-echo "    allow-network-fetch: ${ALLOW_NETWORK_FETCH}"
 
 validate_installer_ui() {
     local dir="$1"
