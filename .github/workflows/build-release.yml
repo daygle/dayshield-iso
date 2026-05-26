@@ -80,6 +80,8 @@ jobs:
     steps:
       - name: Checkout ISO repository
         uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          fetch-depth: 1
 
       - name: Resolve build inputs
         # For tag-push builds the rootfs ref and other inputs are read from
@@ -152,6 +154,18 @@ jobs:
             echo "Unable to determine rootfs_ref automatically and none was provided"
             exit 1
           fi
+          if [[ ! "${RELEASE_TAG}" =~ ^(iso-v|v)[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
+            echo "Invalid ISO release tag: ${RELEASE_TAG}" >&2
+            exit 1
+          fi
+          if [[ ! "${ROOTFS_REF}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
+            echo "Invalid rootfs release tag: ${ROOTFS_REF}" >&2
+            exit 1
+          fi
+          if [ -n "${INSTALLER_UI_REF_REQUESTED:-}" ] && [[ ! "${INSTALLER_UI_REF_REQUESTED}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
+            echo "Invalid installer UI release tag: ${INSTALLER_UI_REF_REQUESTED}" >&2
+            exit 1
+          fi
           echo "Building ISO tag:    ${RELEASE_TAG}"
           echo "Rootfs repo:         ${ROOTFS_REPO}"
           echo "Rootfs ref:          ${ROOTFS_REF}"
@@ -165,21 +179,25 @@ jobs:
           set -euo pipefail
           REPO="daygle/dayshield-installer-ui"
           CANDIDATE="${INSTALLER_UI_REF_REQUESTED}"
-          LATEST_STABLE="$(gh release list --repo "${REPO}" --limit 1 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[0].tagName')"
-
-          if [ -z "${LATEST_STABLE}" ] || [ "${LATEST_STABLE}" = "null" ]; then
-            echo "ERROR: no stable installer UI release found in ${REPO}" >&2
-            exit 1
-          fi
 
           # If no installer UI ref was requested, use latest stable release.
           if [ -z "${CANDIDATE}" ]; then
+            LATEST_STABLE="$(gh release list --repo "${REPO}" --limit 1 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[0].tagName')"
+            if [ -z "${LATEST_STABLE}" ] || [ "${LATEST_STABLE}" = "null" ]; then
+              echo "ERROR: no stable installer UI release found in ${REPO}" >&2
+              exit 1
+            fi
             RESOLVED="${LATEST_STABLE}"
             echo "Auto-resolved installer UI release tag: ${RESOLVED}"
           elif gh release view "${CANDIDATE}" --repo "${REPO}" >/dev/null 2>&1; then
             RESOLVED="${CANDIDATE}"
             echo "Resolved installer UI release tag: ${RESOLVED}"
           else
+            LATEST_STABLE="$(gh release list --repo "${REPO}" --limit 1 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[0].tagName')"
+            if [ -z "${LATEST_STABLE}" ] || [ "${LATEST_STABLE}" = "null" ]; then
+              echo "ERROR: no stable installer UI release found in ${REPO}" >&2
+              exit 1
+            fi
             RESOLVED="${LATEST_STABLE}"
             echo "WARNING: installer UI release '${CANDIDATE}' not found; using latest stable release '${RESOLVED}'"
           fi
