@@ -298,13 +298,12 @@ jobs:
           cat "${ISO_NAME}.sha256"
 
       - name: Create or update ISO release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          name: ISO ${{ env.RELEASE_TAG }}
-          files: |
-            ${{ env.ISO_NAME }}
-            ${{ env.ISO_NAME }}.sha256
-          generate_release_notes: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" "${ISO_NAME}" "${ISO_NAME}.sha256" --clobber
+          else
+            gh release create "${RELEASE_TAG}" "${ISO_NAME}" "${ISO_NAME}.sha256" --title "ISO ${RELEASE_TAG}" --generate-notes
+          fi
