@@ -226,7 +226,7 @@ check "grub.cfg includes UEFI local-disk fallback entry" \
     grep -q 'menuentry "Boot from local disk (UEFI firmware)"' "${ISO_MOUNT}/boot/grub/grub.cfg"
 check "grub.cfg includes BIOS local-disk fallback entry" \
     grep -q 'menuentry "Boot from local disk (BIOS)"' "${ISO_MOUNT}/boot/grub/grub.cfg"
-check "grub.cfg BIOS fallback tries secondary disk" \
+check "grub.cfg BIOS fallback tries alternate disk" \
     grep -q 'set root=(hd1)' "${ISO_MOUNT}/boot/grub/grub.cfg"
 
 # ---------------------------------------------------------------------------

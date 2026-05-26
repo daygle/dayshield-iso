@@ -727,9 +727,6 @@ UUID=${STATE_UUID} /var       ext4  defaults,noatime  0  2
 tmpfs              /tmp       tmpfs defaults           0  0
 EOF
 
-mkdir -p "${TARGET_MOUNT}/etc/dayshield"
-printf 'ostree\n' > "${TARGET_MOUNT}/etc/dayshield/rootfs-slot"
-
 # ---------------------------------------------------------------------------
 # Enable systemd-networkd on the target by creating the
 # required symlinks directly.  Pseudo-filesystem bind mounts were torn down

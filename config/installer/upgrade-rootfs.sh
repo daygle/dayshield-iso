@@ -126,7 +126,7 @@ EOF
 [[ -f "${SQUASHFS_IMG}" ]] || error "Rootfs squashfs not found: ${SQUASHFS_IMG}"
 command -v ostree >/dev/null 2>&1 || error "ostree CLI is required in the live environment for upgrade mode."
 
-ROOT_DEV="$(resolve_partition DS_SYSROOT DS_PRIMARY)"
+ROOT_DEV="$(label_device DS_SYSROOT)"
 BOOT_DEV="$(resolve_partition DAYSHIELD_BOOT DAYSHIELD_BOOT)"
 STATE_DEV="$(resolve_partition DS_STATE DAYSHIELD_STATE)"
 EFI_DEV="$(resolve_efi_partition)"
