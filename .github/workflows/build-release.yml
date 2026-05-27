@@ -1,32 +1,5 @@
 name: Build & Release
 
-# This workflow builds and publishes the DayShield installer ISO.
-#
-# ISO releases are independent of runtime component (core/ui/rootfs) version
-# tags.  A new ISO is only needed when you want to update the installable
-# medium (e.g. embed a new rootfs baseline or update the installer UI).
-# Installed systems receive post-install runtime updates from the manifest
-# without requiring a new ISO.
-#
-# Trigger options
-# ---------------
-# 1. Tag push (automated)
-#    Push an iso-v* tag (e.g. iso-v1.0.3) or v* tag (e.g. v1.0.3)
-#    in this repository.
-#    Before pushing the tag, update `release-inputs.env` in this repo to pin
-#    the desired rootfs ref (and optionally the installer UI ref).
-#
-# 2. workflow_dispatch (manual, with overridable inputs)
-#    Run from the Actions tab or via the gh CLI:
-#      gh workflow run build-iso-release.yml \
-#        --field tag=iso-v1.0.3 \
-#        --field rootfs_ref=v2.1.0 \
-#        --field rootfs_repo=daygle/dayshield-rootfs
-#
-# 3. repository_dispatch (programmatic)
-#    POST to the GitHub API with event type `build-iso-from-release` and
-#    client_payload fields: tag, rootfs_ref, rootfs_repo, installer_ui_ref.
-
 on:
   push:
     tags:
