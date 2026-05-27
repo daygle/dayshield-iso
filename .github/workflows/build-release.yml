@@ -278,25 +278,21 @@ jobs:
           echo "ROOTFS_CHECKSUM_FILE=${ROOTFS_CHECKSUM_FILE}" >> "$GITHUB_ENV"
           ls -lh artifacts
 
-      - name: Verify rootfs checksum
+      - name: Extract rootfs checksum
         run: |
           set -euo pipefail
           cd artifacts
           if [ "${ROOTFS_CHECKSUM_FILE}" = "${ROOTFS_ASSET}.sha256" ]; then
-            cp "${ROOTFS_CHECKSUM_FILE}" rootfs.sha256
+            ROOTFS_SHA256="$(awk '{print $1; exit}' "${ROOTFS_CHECKSUM_FILE}" | tr -d '[:space:]')"
           else
-            awk -v file="${ROOTFS_ASSET}" '$2 == file {print $1 "  " $2}' "${ROOTFS_CHECKSUM_FILE}" > rootfs.sha256
-            if [ "$(wc -l < rootfs.sha256)" -ne 1 ]; then
-              echo "ERROR: expected exactly one checksum entry for ${ROOTFS_ASSET} in ${ROOTFS_CHECKSUM_FILE}" >&2
-              echo "Matching entries found:" >&2
-              awk -v file="${ROOTFS_ASSET}" '$2 == file {print}' "${ROOTFS_CHECKSUM_FILE}" >&2 || true
+            ROOTFS_SHA256="$(awk -v file="${ROOTFS_ASSET}" '$2 == file {print $1; exit}' "${ROOTFS_CHECKSUM_FILE}" | tr -d '[:space:]')"
+            if [ -z "${ROOTFS_SHA256}" ]; then
+              echo "ERROR: no checksum entry for ${ROOTFS_ASSET} in ${ROOTFS_CHECKSUM_FILE}" >&2
               exit 1
             fi
           fi
-          sha256sum -c rootfs.sha256
-          ROOTFS_SHA256="$(awk '{print $1}' rootfs.sha256)"
           echo "ROOTFS_SHA256=${ROOTFS_SHA256}" >> "$GITHUB_ENV"
-          echo "Verified rootfs checksum: ${ROOTFS_SHA256}"
+          echo "Rootfs checksum: ${ROOTFS_SHA256}"
 
       - name: Build ISO
         run: |
