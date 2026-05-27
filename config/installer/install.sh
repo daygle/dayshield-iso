@@ -321,6 +321,24 @@ bootstrap_state_partition() {
     rmdir "${state_mount}"
 }
 
+require_ostree_tooling() {
+    local target="$1"
+    local missing=0
+
+    if [[ ! -x "${target}/usr/bin/ostree" ]]; then
+        warn "Installed target is missing /usr/bin/ostree."
+        missing=1
+    fi
+    if [[ ! -x "${target}/usr/local/lib/dayshield/ostree-update.sh" ]]; then
+        warn "Installed target is missing /usr/local/lib/dayshield/ostree-update.sh."
+        missing=1
+    fi
+
+    if (( missing )); then
+        error "Input rootfs is missing required DayShield OSTree update tooling; rebuild dayshield-rootfs and recreate the ISO."
+    fi
+}
+
 stage_ostree_seed_if_present() {
     local target="$1"
     local osname ref
@@ -637,6 +655,7 @@ mount "${EFI_PART}" "${TARGET_MOUNT}/boot/efi"
 # ---------------------------------------------------------------------------
 info "Extracting rootfs squashfs …"
 "${INSTALLER_DIR}/copy-rootfs.sh" "${SQUASHFS_IMG}" "${TARGET_MOUNT}"
+require_ostree_tooling "${TARGET_MOUNT}"
 bootstrap_state_partition "${STATE_PART}"
 mount "${STATE_PART}" "${TARGET_MOUNT}/var"
 if [[ -d "${TARGET_MOUNT}/ostree/repo" ]]; then

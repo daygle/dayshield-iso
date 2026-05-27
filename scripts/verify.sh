@@ -186,6 +186,10 @@ check "squashfs /usr/lib/dayshield-installer/firstboot-run.sh exists" \
     test -f "${SQ_MOUNT}/usr/lib/dayshield-installer/firstboot-run.sh"
 check "squashfs /usr/local/lib/dayshield/installer-finalize.sh exists" \
     test -f "${SQ_MOUNT}/usr/local/lib/dayshield/installer-finalize.sh"
+check "squashfs /usr/bin/ostree exists" \
+    test -x "${SQ_MOUNT}/usr/bin/ostree"
+check "squashfs /usr/local/lib/dayshield/ostree-update.sh exists" \
+    test -x "${SQ_MOUNT}/usr/local/lib/dayshield/ostree-update.sh"
 check "squashfs /installer-ui/index.html exists" \
     test -f "${SQ_MOUNT}/installer-ui/index.html"
 check "CLI installer invokes shared finalization helper" \
