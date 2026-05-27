@@ -306,6 +306,7 @@ bootstrap_state_partition() {
 
     state_mount="$(mktemp -d)"
     mount "${state_part}" "${state_mount}"
+    trap 'umount "${state_mount}" 2>/dev/null || true; rmdir "${state_mount}" 2>/dev/null || true' RETURN
 
     if [[ -d "${TARGET_MOUNT}/var" ]]; then
         info "Bootstrapping persistent /var state partition ..."
@@ -319,6 +320,7 @@ bootstrap_state_partition() {
     mkdir -p "${state_mount}/lib/dayshield"
     umount "${state_mount}"
     rmdir "${state_mount}"
+    trap - RETURN
 }
 
 require_ostree_tooling() {
