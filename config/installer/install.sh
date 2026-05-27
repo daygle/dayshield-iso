@@ -357,6 +357,9 @@ stage_ostree_seed_if_present() {
     fi
 
     if [[ -z "${ref}" ]]; then
+        if [[ -f "${target}/usr/local/share/dayshield-updates/ostree-build-manifest.json" ]]; then
+            error "OSTree repo present but no refs discovered in ${target}/ostree/repo; rootfs image does not contain a valid OSTree repo."
+        fi
         warn "OSTree repo present but no refs discovered; skipping deployment staging."
         return 0
     fi
