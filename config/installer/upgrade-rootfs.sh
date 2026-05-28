@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# upgrade-rootfs.sh - Stage an ISO OSTree deployment onto an existing DayShield install.
+# upgrade-rootfs.sh - Stage an image-based rootfs update from the ISO.
 #
 # Usage: upgrade-rootfs.sh <disk> <filesystem.squashfs>
 
@@ -82,49 +82,115 @@ resolve_efi_partition() {
     printf '%s\n' "${efi_dev}"
 }
 
-detect_staging_ostree_ref() {
-    local ref
-    ref="${DAYSHIELD_OSTREE_REF:-}"
-    if [[ -n "${ref}" ]]; then
-        printf '%s\n' "${ref}"
-        return 0
-    fi
-    ref="$(ostree --repo="${STAGING_MOUNT}/ostree/repo" refs --list 2>/dev/null | head -n1 || true)"
-    printf '%s\n' "${ref}"
+json_string_value() {
+    local file="$1" key="$2"
+    sed -n -E "s/^[[:space:]]*\"${key}\"[[:space:]]*:[[:space:]]*\"([^\"]+)\".*/\\1/p" "${file}" | head -n1
 }
 
-stage_ostree_upgrade() {
-    local osname ref
-    osname="${DAYSHIELD_OSTREE_OSNAME:-dayshield}"
-    ref="$(detect_staging_ostree_ref)"
-    [[ -n "${ref}" ]] || error "Could not determine OSTree ref from staged ISO rootfs. Set DAYSHIELD_OSTREE_REF."
+sanitize_version() {
+    local version="$1"
+    [[ "${version}" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+    printf '%s\n' "${version}"
+}
 
-    info "Pulling staged OSTree commit '${ref}' into target sysroot ..."
-    ostree --repo="${TARGET_MOUNT}/ostree/repo" pull-local "${STAGING_MOUNT}/ostree/repo" "${ref}"
+detect_version_from_file() {
+    local file="$1" key="$2" value
+    [[ -f "${file}" ]] || return 1
+    value="$(json_string_value "${file}" "${key}" || true)"
+    [[ -n "${value}" ]] || return 1
+    sanitize_version "${value}"
+}
 
-    info "Ensuring stateroot '${osname}' exists ..."
-    if ! ostree admin --sysroot="${TARGET_MOUNT}" os-init "${osname}" 2>/dev/null; then
-        info "Stateroot '${osname}' already initialized."
+detect_rootfs_version() {
+    local version
+    version="${DAYSHIELD_ROOTFS_VERSION:-}"
+    if [[ -n "${version}" ]]; then
+        sanitize_version "${version}" || error "Invalid DAYSHIELD_ROOTFS_VERSION: ${version}"
+        return 0
     fi
 
-    info "Deploying staged OSTree ref '${ref}' for next boot ..."
-    ostree admin --sysroot="${TARGET_MOUNT}" deploy --os="${osname}" "${ref}"
+    version="$(detect_version_from_file "${STAGING_MOUNT}/usr/local/share/dayshield-updates/rootfs-build-manifest.json" "version" || true)"
+    if [[ -n "${version}" ]]; then
+        printf '%s\n' "${version}"
+        return 0
+    fi
 
-    mkdir -p "${TARGET_MOUNT}/var/lib/dayshield/update"
-    cat > "${TARGET_MOUNT}/var/lib/dayshield/update/ostree-iso-stage.json" <<EOF
+    version="$(sed -n -E 's/^VERSION_ID="?([^"]+)"?/\1/p' "${STAGING_MOUNT}/etc/os-release" | head -n1 || true)"
+    if [[ -n "${version}" ]]; then
+        sanitize_version "${version}" || error "Detected unsupported VERSION_ID from staged rootfs: ${version}"
+        return 0
+    fi
+
+    error "Could not determine rootfs version from staged rootfs. Set DAYSHIELD_ROOTFS_VERSION."
+}
+
+detect_current_rootfs_version() {
+    local version
+    version="$(detect_version_from_file "${TARGET_MOUNT}/var/lib/dayshield/update/rootfs-selection.json" "current" || true)"
+    if [[ -n "${version}" ]]; then
+        printf '%s\n' "${version}"
+        return 0
+    fi
+
+    version="$(detect_version_from_file "${TARGET_MOUNT}/usr/local/share/dayshield-updates/rootfs-build-manifest.json" "version" || true)"
+    if [[ -n "${version}" ]]; then
+        printf '%s\n' "${version}"
+        return 0
+    fi
+
+    version="$(sed -n -E 's/^VERSION_ID="?([^"]+)"?/\1/p' "${TARGET_MOUNT}/etc/os-release" | head -n1 || true)"
+    if [[ -n "${version}" ]]; then
+        version="$(sanitize_version "${version}" || true)"
+        if [[ -n "${version}" ]]; then
+            printf '%s\n' "${version}"
+            return 0
+        fi
+    fi
+
+    printf '%s\n' "unknown"
+}
+
+stage_rootfs_image_upgrade() {
+    local next_version current_version image_store rel_image_path previous_version
+    next_version="$(detect_rootfs_version)"
+    current_version="$(detect_current_rootfs_version)"
+    previous_version=""
+    image_store="${TARGET_MOUNT}/rootfs-images"
+    rel_image_path="/rootfs-images/rootfs-${next_version}.squashfs"
+
+    info "Staging rootfs image version '${next_version}' ..."
+    mkdir -p "${image_store}"
+    cp -f "${SQUASHFS_IMG}" "${TARGET_MOUNT}${rel_image_path}"
+    chmod 644 "${TARGET_MOUNT}${rel_image_path}"
+
+    if [[ "${current_version}" != "${next_version}" ]]; then
+        previous_version="${current_version}"
+    fi
+
+    mkdir -p "${TARGET_MOUNT}/var/lib/dayshield/update" "${TARGET_MOUNT}/boot"
+    cat > "${TARGET_MOUNT}/var/lib/dayshield/update/rootfs-selection.json" <<EOF
 {
+  "schemaVersion": 1,
   "status": "staged",
-  "ref": "${ref}",
-  "osname": "${osname}",
+  "current": "${current_version}",
+  "next": "${next_version}",
+  "previous": "${previous_version}",
+  "imageStore": "/rootfs-images",
+  "nextImage": "${rel_image_path}",
   "source": "iso",
   "preparedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 }
+EOF
+
+    cat > "${TARGET_MOUNT}/boot/dayshield-rootfs-next.env" <<EOF
+DAYSHIELD_ROOTFS_NEXT_VERSION=${next_version}
+DAYSHIELD_ROOTFS_NEXT_IMAGE=${rel_image_path}
+DAYSHIELD_ROOTFS_CURRENT_VERSION=${current_version}
 EOF
 }
 
 [[ -b "${TARGET_DISK}" ]] || error "Not a block device: ${TARGET_DISK}"
 [[ -f "${SQUASHFS_IMG}" ]] || error "Rootfs squashfs not found: ${SQUASHFS_IMG}"
-command -v ostree >/dev/null 2>&1 || error "ostree CLI is required in the live environment for upgrade mode."
 
 ROOT_DEV="$(label_device DS_SYSROOT)"
 BOOT_DEV="$(label_device DAYSHIELD_BOOT)"
@@ -132,7 +198,7 @@ STATE_DEV="$(resolve_partition DS_STATE DAYSHIELD_STATE)"
 EFI_DEV="$(resolve_efi_partition)"
 
 [[ -n "${ROOT_DEV}" && -n "${BOOT_DEV}" ]] || \
-    error "No compatible DayShield OSTree layout found. Expected DS_SYSROOT and DAYSHIELD_BOOT labels."
+    error "No compatible DayShield layout found. Expected DS_SYSROOT and DAYSHIELD_BOOT labels."
 [[ -b "${EFI_DEV}" ]] || error "EFI partition not found on ${TARGET_DISK}"
 
 require_on_target_disk "${ROOT_DEV}"
@@ -164,22 +230,12 @@ mount -t tmpfs -o size=3G none "${STAGING_MOUNT}"
 
 info "Extracting ISO rootfs to temporary staging area ..."
 "${INSTALLER_DIR}/copy-rootfs.sh" "${SQUASHFS_IMG}" "${STAGING_MOUNT}"
-[[ -d "${STAGING_MOUNT}/ostree/repo" ]] || error "Staged rootfs does not contain /ostree/repo."
-[[ -d "${TARGET_MOUNT}/ostree/repo" ]] || error "Target sysroot does not contain /ostree/repo."
 
 if [[ -n "${STATE_DEV}" ]] && [[ -d "${STAGING_MOUNT}/var" ]]; then
     rsync -aHAX --numeric-ids "${STAGING_MOUNT}/var/" "${TARGET_MOUNT}/var/"
 fi
 
-for _fs in dev dev/pts proc sys run; do
-    mkdir -p "${TARGET_MOUNT}/${_fs}"
-    mount --bind "/${_fs}" "${TARGET_MOUNT}/${_fs}"
-done
-
-stage_ostree_upgrade
-
-info "Regenerating GRUB menu for staged deployment ..."
-chroot "${TARGET_MOUNT}" grub-mkconfig -o /boot/grub/grub.cfg
+stage_rootfs_image_upgrade
 
 sync
-info "OSTree upgrade staged successfully. Reboot to boot the new deployment."
+info "Rootfs image update staged successfully. Reboot to boot the new version."
