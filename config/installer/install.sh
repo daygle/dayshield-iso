@@ -22,7 +22,6 @@ INSTALL_WAN_IFACE=""
 INSTALL_LAN_IFACE=""
 INSTALL_MODE="${DAYSHIELD_INSTALL_MODE:-}"
 ISO_SCAN_MOUNT=""
-HAS_OSTREE_REPO=0
 
 # Redirect output to log
 exec > >(tee -a "${LOG_FILE}") 2>&1
@@ -323,54 +322,55 @@ bootstrap_state_partition() {
     trap - RETURN
 }
 
-require_ostree_tooling() {
-    local target="$1"
-    local missing=0
-
-    if [[ ! -x "${target}/usr/bin/ostree" ]]; then
-        warn "Installed target is missing /usr/bin/ostree."
-        missing=1
-    fi
-    if [[ ! -x "${target}/usr/local/lib/dayshield/ostree-update.sh" ]]; then
-        warn "Installed target is missing /usr/local/lib/dayshield/ostree-update.sh."
-        missing=1
-    fi
-
-    if (( missing )); then
-        error "Input rootfs is missing required DayShield OSTree update tooling; rebuild dayshield-rootfs and recreate the ISO."
-    fi
+json_string_value() {
+    local file="$1" key="$2"
+    sed -n -E "s/^[[:space:]]*\"${key}\"[[:space:]]*:[[:space:]]*\"([^\"]+)\".*/\\1/p" "${file}" | head -n1
 }
 
-stage_ostree_seed_if_present() {
-    local target="$1"
-    local osname ref
+sanitize_version() {
+    local version="$1"
+    [[ "${version}" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+    printf '%s\n' "${version}"
+}
 
-    [[ -d "${target}/ostree/repo" ]] || return 0
-
-    if ! command -v ostree >/dev/null 2>&1; then
-        warn "ostree CLI is unavailable in live environment; skipping OSTree deployment staging."
-        return 0
+detect_installed_rootfs_version() {
+    local target="$1" version=""
+    if [[ -f "${target}/usr/local/share/dayshield-updates/rootfs-build-manifest.json" ]]; then
+        version="$(json_string_value "${target}/usr/local/share/dayshield-updates/rootfs-build-manifest.json" "version" || true)"
     fi
-
-    osname="${DAYSHIELD_OSTREE_OSNAME:-dayshield}"
-    ref="${DAYSHIELD_OSTREE_REF:-}"
-    if [[ -z "${ref}" ]]; then
-        ref="$(ostree --repo="${target}/ostree/repo" refs --list 2>/dev/null | head -n1 || true)"
+    if [[ -z "${version}" ]] && [[ -f "${target}/etc/os-release" ]]; then
+        version="$(sed -n -E 's/^VERSION_ID="?([^"]+)"?/\1/p' "${target}/etc/os-release" | head -n1 || true)"
     fi
-
-    if [[ -z "${ref}" ]]; then
-        if [[ -f "${target}/usr/local/share/dayshield-updates/ostree-build-manifest.json" ]]; then
-            error "OSTree repo present but no refs discovered in ${target}/ostree/repo; rootfs image does not contain a valid OSTree repo."
-        fi
-        warn "OSTree repo present but no refs discovered; skipping deployment staging."
-        return 0
+    if [[ -z "${version}" ]]; then
+        version="unknown"
     fi
+    sanitize_version "${version}" || printf '%s\n' "unknown"
+}
 
-    info "Staging OSTree deployment '${ref}' for stateroot '${osname}' ..."
-    if ! ostree admin --sysroot="${target}" os-init "${osname}" 2>/dev/null; then
-        info "OSTree stateroot '${osname}' already initialized."
-    fi
-    ostree admin --sysroot="${target}" deploy --os="${osname}" "${ref}"
+initialize_rootfs_boot_metadata() {
+    local target="$1" current_version
+    current_version="$(detect_installed_rootfs_version "${target}")"
+
+    info "Writing rootfs version-selection metadata (current: ${current_version}) ..."
+    mkdir -p "${target}/var/lib/dayshield/update" "${target}/boot" "${target}/rootfs-images"
+
+    cat > "${target}/var/lib/dayshield/update/rootfs-selection.json" <<EOF
+{
+  "schemaVersion": 1,
+  "status": "active",
+  "current": "${current_version}",
+  "next": "",
+  "previous": "",
+  "imageStore": "/rootfs-images",
+  "currentMode": "extracted-rootfs",
+  "updatedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+}
+EOF
+
+    cat > "${target}/boot/dayshield-rootfs-selected.env" <<EOF
+DAYSHIELD_ROOTFS_CURRENT_VERSION=${current_version}
+DAYSHIELD_ROOTFS_CURRENT_MODE=extracted-rootfs
+EOF
 }
 
 SQUASHFS_IMG="$(find_squashfs_image || true)"
@@ -537,7 +537,7 @@ choose_install_mode() {
 
     echo ""
     echo "DayShield ISO options:"
-    echo "  [1] Upgrade from ISO   - stage this ISO OSTree deployment on an existing DayShield install"
+    echo "  [1] Upgrade from ISO   - stage this ISO rootfs image version for next boot"
     echo "  [2] Reinstall from ISO - erase the selected disk and install fresh"
     while true; do
         read -rp "Select mode [1-2]: " _mode
@@ -577,7 +577,7 @@ choose_install_mode
 
 if [[ "${INSTALL_MODE}" == "upgrade" ]]; then
     info "Upgrading existing DayShield appliance on ${TARGET_DISK} from ISO"
-    info "An OSTree deployment from this ISO will be staged for the next boot."
+    info "A rootfs image version from this ISO will be staged for the next boot."
     if [[ "${DAYSHIELD_UNATTENDED:-}" != "1" ]]; then
         read -rp "Type '${TARGET_DISK}' to stage ISO upgrade: " confirm
         [[ "${confirm}" == "${TARGET_DISK}" ]] || error "Upgrade cancelled."
@@ -639,7 +639,7 @@ mkfs.fat -F 32 -n "DS_EFI" "${EFI_PART}"
 info "Formatting shared boot partition: ${BOOT_PART}"
 mkfs.ext4 -F -L "DAYSHIELD_BOOT" "${BOOT_PART}"
 
-info "Formatting OSTree sysroot partition: ${SYSROOT_PART}"
+info "Formatting system rootfs partition: ${SYSROOT_PART}"
 mkfs.ext4 -F -L "DS_SYSROOT" "${SYSROOT_PART}"
 
 info "Formatting persistent state partition: ${STATE_PART}"
@@ -660,12 +660,8 @@ mount "${EFI_PART}" "${TARGET_MOUNT}/boot/efi"
 # ---------------------------------------------------------------------------
 info "Extracting rootfs squashfs …"
 "${INSTALLER_DIR}/copy-rootfs.sh" "${SQUASHFS_IMG}" "${TARGET_MOUNT}"
-require_ostree_tooling "${TARGET_MOUNT}"
 bootstrap_state_partition "${STATE_PART}"
 mount "${STATE_PART}" "${TARGET_MOUNT}/var"
-if [[ -d "${TARGET_MOUNT}/ostree/repo" ]]; then
-    HAS_OSTREE_REPO=1
-fi
 
 # ---------------------------------------------------------------------------
 # Clean live-boot artefacts from the installed target
@@ -676,28 +672,26 @@ for _fs in dev dev/pts proc sys run; do
     mount --bind "/${_fs}" "${TARGET_MOUNT}/${_fs}"
 done
 
-if (( HAS_OSTREE_REPO )); then
-    stage_ostree_seed_if_present "${TARGET_MOUNT}"
-else
-    info "Purging live-boot / live-config packages from target …"
-    chroot "${TARGET_MOUNT}" /bin/sh -c 'dpkg --configure -a 2>/dev/null || true'
-    chroot "${TARGET_MOUNT}" /bin/sh -c \
-        'DEBIAN_FRONTEND=noninteractive apt-get -y --purge remove \
-            live-boot live-boot-initramfs-tools \
-            live-config live-config-systemd live-config-sysvinit \
-            live-tools 2>/dev/null || true'
+info "Purging live-boot / live-config packages from target …"
+chroot "${TARGET_MOUNT}" /bin/sh -c 'dpkg --configure -a 2>/dev/null || true'
+chroot "${TARGET_MOUNT}" /bin/sh -c \
+    'DEBIAN_FRONTEND=noninteractive apt-get -y --purge remove \
+        live-boot live-boot-initramfs-tools \
+        live-config live-config-systemd live-config-sysvinit \
+        live-tools 2>/dev/null || true'
 
-    # Remove any leftover live directories not caught by the package purge
-    info "Removing leftover live directories …"
-    rm -rf \
-        "${TARGET_MOUNT}/lib/live" \
-        "${TARGET_MOUNT}/usr/lib/live" \
-        "${TARGET_MOUNT}/etc/live"
+# Remove any leftover live directories not caught by the package purge
+info "Removing leftover live directories …"
+rm -rf \
+    "${TARGET_MOUNT}/lib/live" \
+    "${TARGET_MOUNT}/usr/lib/live" \
+    "${TARGET_MOUNT}/etc/live"
 
-    # Regenerate a clean initramfs without live-boot hooks
-    info "Regenerating initramfs inside target …"
-    chroot "${TARGET_MOUNT}" update-initramfs -u -k all
-fi
+# Regenerate a clean initramfs without live-boot hooks
+info "Regenerating initramfs inside target …"
+chroot "${TARGET_MOUNT}" update-initramfs -u -k all
+
+initialize_rootfs_boot_metadata "${TARGET_MOUNT}"
 
 FINALIZE_SCRIPT="${TARGET_MOUNT}/usr/local/lib/dayshield/installer-finalize.sh"
 if [[ -x "${FINALIZE_SCRIPT}" ]]; then

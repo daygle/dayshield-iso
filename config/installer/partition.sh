@@ -5,7 +5,7 @@
 #   Partition 1: BIOS boot partition (1 MiB, bios_grub)
 #   Partition 2: EFI System Partition (512 MiB, FAT32)
 #   Partition 3: Shared boot partition (1 GiB, ext4)
-#   Partition 4: OSTree sysroot partition (remaining disk minus state partition, ext4)
+#   Partition 4: System rootfs partition (remaining disk minus state partition, ext4)
 #   Partition 5: Persistent writable state partition (/var, fixed size 8 GiB, ext4)
 #
 # Usage: partition.sh <disk>  e.g. partition.sh /dev/sda

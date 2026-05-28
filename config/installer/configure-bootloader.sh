@@ -57,7 +57,7 @@ mkdir -p "${TARGET}/boot/efi/EFI/BOOT"
 cp "${TARGET}/boot/efi/EFI/dayshield/grubx64.efi" \
    "${TARGET}/boot/efi/EFI/BOOT/BOOTX64.EFI"
 
-echo "--> Removing legacy pre-OSTree GRUB fragment if present ..."
+echo "--> Removing legacy DayShield GRUB fragment if present ..."
 rm -f "${TARGET}/etc/grub.d/09_dayshield_ab"
 
 # ---------------------------------------------------------------------------
