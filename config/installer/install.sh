@@ -348,28 +348,22 @@ detect_installed_rootfs_version() {
 }
 
 initialize_rootfs_boot_metadata() {
-    local target="$1" current_version
+    local target="$1" current_version now
     current_version="$(detect_installed_rootfs_version "${target}")"
+    now="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
-    info "Writing rootfs version-selection metadata (current: ${current_version}) ..."
-    mkdir -p "${target}/var/lib/dayshield/update" "${target}/boot" "${target}/rootfs-images"
+    info "Writing rootfs version metadata (current: ${current_version}) ..."
+    mkdir -p \
+        "${target}/var/lib/dayshield/rootfs-update" \
+        "${target}/boot/dayshield/images" \
+        "${target}/boot/dayshield/metadata"
 
-    cat > "${target}/var/lib/dayshield/update/rootfs-selection.json" <<EOF
+    # Write current.json — schema matches RootfsVersionMeta (camelCase) in rootfs_update.rs
+    cat > "${target}/var/lib/dayshield/rootfs-update/current.json" <<EOF
 {
-  "schemaVersion": 1,
-  "status": "active",
-  "current": "${current_version}",
-  "next": "",
-  "previous": "",
-  "imageStore": "/rootfs-images",
-  "currentMode": "extracted-rootfs",
-  "updatedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  "version": "${current_version}",
+  "recordedAt": "${now}"
 }
-EOF
-
-    cat > "${target}/boot/dayshield-rootfs-selected.env" <<EOF
-DAYSHIELD_ROOTFS_CURRENT_VERSION=${current_version}
-DAYSHIELD_ROOTFS_CURRENT_MODE=extracted-rootfs
 EOF
 }
 
@@ -582,7 +576,16 @@ if [[ "${INSTALL_MODE}" == "upgrade" ]]; then
         read -rp "Type '${TARGET_DISK}' to stage ISO upgrade: " confirm
         [[ "${confirm}" == "${TARGET_DISK}" ]] || error "Upgrade cancelled."
     fi
-    "${INSTALLER_DIR}/upgrade-rootfs.sh" "${TARGET_DISK}" "${SQUASHFS_IMG}"
+    # Use the clean rootfs squashfs embedded at /installer/rootfs.squashfs on the ISO
+    # medium rather than the live filesystem.squashfs which has live-boot packages
+    # injected and must not be installed on the target.
+    MEDIUM_ROOT="${SQUASHFS_IMG%/live/filesystem.squashfs}"
+    UPGRADE_SQUASHFS="${MEDIUM_ROOT}/installer/rootfs.squashfs"
+    if [[ ! -f "${UPGRADE_SQUASHFS}" ]]; then
+        warn "Clean rootfs squashfs not found at ${UPGRADE_SQUASHFS}; falling back to live squashfs"
+        UPGRADE_SQUASHFS="${SQUASHFS_IMG}"
+    fi
+    "${INSTALLER_DIR}/upgrade-rootfs.sh" "${TARGET_DISK}" "${UPGRADE_SQUASHFS}"
     cleanup_all_mounts
     trap - EXIT
     info "Upgrade staged. Remove the installation medium and reboot."

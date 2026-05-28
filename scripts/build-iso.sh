@@ -12,6 +12,7 @@ set -euo pipefail
 # Defaults
 # ---------------------------------------------------------------------------
 ROOTFS=""
+ROOTFS_SQUASHFS=""
 OUTPUT="dayshield.iso"
 ARCH="amd64"
 INSTALLER_UI_DIR=""
@@ -29,6 +30,8 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --rootfs)
             ROOTFS="$2"; shift 2 ;;
+        --rootfs-squashfs)
+            ROOTFS_SQUASHFS="$2"; shift 2 ;;
         --output)
             OUTPUT="$2"; shift 2 ;;
         --arch)
@@ -170,6 +173,9 @@ run_step build-bootloader.sh
 ASSEMBLE_ARGS=(--output "${OUTPUT}")
 ASSEMBLE_ARGS+=(--installer-ui "${INSTALLER_UI_DIR}")
 ASSEMBLE_ARGS+=(--rootfs "${ROOTFS}")
+if [[ -n "${ROOTFS_SQUASHFS}" ]]; then
+    ASSEMBLE_ARGS+=(--rootfs-squashfs "${ROOTFS_SQUASHFS}")
+fi
 run_step assemble-iso.sh "${ASSEMBLE_ARGS[@]}"
 
 # ---------------------------------------------------------------------------

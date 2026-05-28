@@ -19,13 +19,15 @@ source "${SCRIPT_DIR}/installer-ui-common.sh"
 
 OUTPUT=""
 ROOTFS_ARCHIVE=""
+ROOTFS_SQUASHFS=""
 INSTALLER_UI_DIR=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --output)        OUTPUT="$2"; shift 2 ;;
-        --rootfs)        ROOTFS_ARCHIVE="$2"; shift 2 ;;
-        --installer-ui)  INSTALLER_UI_DIR="$2"; shift 2 ;;
+        --output)          OUTPUT="$2"; shift 2 ;;
+        --rootfs)          ROOTFS_ARCHIVE="$2"; shift 2 ;;
+        --rootfs-squashfs) ROOTFS_SQUASHFS="$2"; shift 2 ;;
+        --installer-ui)    INSTALLER_UI_DIR="$2"; shift 2 ;;
         *) echo "Unknown argument: $1" >&2; exit 1 ;;
     esac
 done
@@ -110,6 +112,14 @@ fi
 if [[ -n "${ROOTFS_ARCHIVE}" ]] && [[ -f "${ROOTFS_ARCHIVE}" ]]; then
     echo "--> Embedding rootfs archive at /installer/rootfs.tar.zst …"
     cp "${ROOTFS_ARCHIVE}" "${ISO_ROOT}/installer/rootfs.tar.zst"
+fi
+
+# Embed the clean rootfs squashfs for ISO-based upgrades.
+# upgrade-rootfs.sh uses this instead of the live squashfs (which has
+# live-boot packages that must not be installed on the target system).
+if [[ -n "${ROOTFS_SQUASHFS}" ]] && [[ -f "${ROOTFS_SQUASHFS}" ]]; then
+    echo "--> Embedding clean rootfs squashfs at /installer/rootfs.squashfs …"
+    cp "${ROOTFS_SQUASHFS}" "${ISO_ROOT}/installer/rootfs.squashfs"
 fi
 
 # Place installer web UI files on ISO (served by installer-ui-web.service)

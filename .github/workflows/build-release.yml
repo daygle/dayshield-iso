@@ -225,14 +225,23 @@ jobs:
           # ROOTFS_REF is the rootfs-specific tag (e.g. v2.1.0), which is
           # independent of the ISO tag or any other component version.
           ROOTFS_ASSET="rootfs-${ROOTFS_REF}.tar.zst"
+          ROOTFS_SQUASHFS_ASSET="rootfs-${ROOTFS_REF}.squashfs"
           gh release download "${ROOTFS_REF}" \
             --repo "${ROOTFS_REPO}" \
             --pattern "${ROOTFS_ASSET}" \
             --pattern "${ROOTFS_ASSET}.sha256" \
+            --pattern "${ROOTFS_SQUASHFS_ASSET}" \
+            --pattern "${ROOTFS_SQUASHFS_ASSET}.sha256" \
             --pattern "checksums.txt" \
             --dir artifacts
           if [ ! -f "artifacts/${ROOTFS_ASSET}" ]; then
             echo "ERROR: missing release asset ${ROOTFS_ASSET} in ${ROOTFS_REPO}@${ROOTFS_REF}" >&2
+            echo "Available assets:" >&2
+            gh release view "${ROOTFS_REF}" --repo "${ROOTFS_REPO}" --json assets --jq '.assets[].name' >&2 || true
+            exit 1
+          fi
+          if [ ! -f "artifacts/${ROOTFS_SQUASHFS_ASSET}" ]; then
+            echo "ERROR: missing release asset ${ROOTFS_SQUASHFS_ASSET} in ${ROOTFS_REPO}@${ROOTFS_REF}" >&2
             echo "Available assets:" >&2
             gh release view "${ROOTFS_REF}" --repo "${ROOTFS_REPO}" --json assets --jq '.assets[].name' >&2 || true
             exit 1
@@ -247,7 +256,11 @@ jobs:
             gh release view "${ROOTFS_REF}" --repo "${ROOTFS_REPO}" --json assets --jq '.assets[].name' >&2 || true
             exit 1
           fi
+          if [ -f "artifacts/${ROOTFS_SQUASHFS_ASSET}.sha256" ]; then
+            (cd artifacts && sha256sum -c "${ROOTFS_SQUASHFS_ASSET}.sha256")
+          fi
           echo "ROOTFS_ASSET=${ROOTFS_ASSET}" >> "$GITHUB_ENV"
+          echo "ROOTFS_SQUASHFS_ASSET=${ROOTFS_SQUASHFS_ASSET}" >> "$GITHUB_ENV"
           echo "ROOTFS_CHECKSUM_FILE=${ROOTFS_CHECKSUM_FILE}" >> "$GITHUB_ENV"
           ls -lh artifacts
 
@@ -274,6 +287,7 @@ jobs:
           sudo ALLOW_NETWORK_FETCH=1 make iso \
             ROOTFS="artifacts/${ROOTFS_ASSET}" \
             ROOTFS_SHA256="${ROOTFS_SHA256}" \
+            ROOTFS_SQUASHFS="artifacts/${ROOTFS_SQUASHFS_ASSET}" \
             INSTALLER_UI="deps/dayshield-installer-ui/installer-ui" \
             OUTPUT="${ISO_NAME}"
           sudo chown -R "$(id -u):$(id -g)" .

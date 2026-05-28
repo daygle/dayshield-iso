@@ -9,12 +9,13 @@ SHELL        := /usr/bin/env bash
 .SHELLFLAGS  := -euo pipefail -c
 
 # Inputs / outputs
-ROOTFS       ?= rootfs.tar.zst
-OUTPUT       ?= dayshield.iso
-ARCH         ?= amd64
-INSTALLER_UI ?= ../dayshield-installer-ui/installer-ui
-ROOTFS_SHA256 ?=
-ISO          ?= $(OUTPUT)
+ROOTFS          ?= rootfs.tar.zst
+ROOTFS_SQUASHFS ?=
+OUTPUT          ?= dayshield.iso
+ARCH            ?= amd64
+INSTALLER_UI    ?= ../dayshield-installer-ui/installer-ui
+ROOTFS_SHA256   ?=
+ISO             ?= $(OUTPUT)
 
 SCRIPTS_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))scripts
 
@@ -39,6 +40,7 @@ iso: ## Build the DayShield installer ISO
 	    --output "$(OUTPUT)" \
 	    --arch   "$(ARCH)" \
 	    $(if $(ROOTFS_SHA256),--rootfs-sha256 "$(ROOTFS_SHA256)",) \
+	    $(if $(ROOTFS_SQUASHFS),--rootfs-squashfs "$(ROOTFS_SQUASHFS)",) \
 	    --installer-ui "$(INSTALLER_UI)"
 	@echo ""
 	@echo "ISO: $(OUTPUT)"
