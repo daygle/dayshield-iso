@@ -151,25 +151,28 @@ detect_current_rootfs_version() {
 }
 
 stage_rootfs_image_upgrade() {
-    local next_version current_version state_dir staging_dir rel_image_path previous_version now
+    local next_version current_version state_dir image_store rel_image_path previous_version now
     next_version="$(detect_rootfs_version)"
     current_version="$(detect_current_rootfs_version)"
     previous_version=""
     state_dir="${TARGET_MOUNT}/var/lib/dayshield/rootfs-update"
-    staging_dir="${state_dir}/staging"
-    rel_image_path="/var/lib/dayshield/rootfs-update/staging/rootfs-${next_version}.squashfs"
+    image_store="${TARGET_MOUNT}/boot/dayshield/images"
+    rel_image_path="/boot/dayshield/images/rootfs-${next_version}.squashfs"
     now="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
     info "Staging rootfs image version '${next_version}' ..."
-    mkdir -p "${staging_dir}"
+    mkdir -p "${image_store}"
     cp -f "${SQUASHFS_IMG}" "${TARGET_MOUNT}${rel_image_path}"
     chmod 644 "${TARGET_MOUNT}${rel_image_path}"
+
+    # Point the boot candidate symlink at the new image
+    ln -sfn "images/rootfs-${next_version}.squashfs" "${TARGET_MOUNT}/boot/dayshield/next"
 
     if [[ "${current_version}" != "${next_version}" && "${current_version}" != "unknown" ]]; then
         previous_version="${current_version}"
     fi
 
-    mkdir -p "${state_dir}" "${TARGET_MOUNT}/boot"
+    mkdir -p "${state_dir}"
 
     # Write pending.json — schema matches RootfsVersionMeta (camelCase) in rootfs_update.rs
     cat > "${state_dir}/pending.json" <<EOF
@@ -199,12 +202,6 @@ EOF
 }
 EOF
     fi
-
-    cat > "${TARGET_MOUNT}/boot/dayshield-rootfs-next.env" <<EOF
-DAYSHIELD_ROOTFS_NEXT_VERSION=${next_version}
-DAYSHIELD_ROOTFS_NEXT_IMAGE=${rel_image_path}
-DAYSHIELD_ROOTFS_CURRENT_VERSION=${current_version}
-EOF
 }
 
 [[ -b "${TARGET_DISK}" ]] || error "Not a block device: ${TARGET_DISK}"
