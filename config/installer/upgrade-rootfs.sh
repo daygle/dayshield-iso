@@ -126,7 +126,7 @@ detect_rootfs_version() {
 
 detect_current_rootfs_version() {
     local version
-    version="$(detect_version_from_file "${TARGET_MOUNT}/var/lib/dayshield/update/rootfs-selection.json" "current" || true)"
+    version="$(detect_version_from_file "${TARGET_MOUNT}/var/lib/dayshield/rootfs-update/current.json" "version" || true)"
     if [[ -n "${version}" ]]; then
         printf '%s\n' "${version}"
         return 0
@@ -151,36 +151,54 @@ detect_current_rootfs_version() {
 }
 
 stage_rootfs_image_upgrade() {
-    local next_version current_version image_store rel_image_path previous_version
+    local next_version current_version state_dir staging_dir rel_image_path previous_version now
     next_version="$(detect_rootfs_version)"
     current_version="$(detect_current_rootfs_version)"
     previous_version=""
-    image_store="${TARGET_MOUNT}/rootfs-images"
-    rel_image_path="/rootfs-images/rootfs-${next_version}.squashfs"
+    state_dir="${TARGET_MOUNT}/var/lib/dayshield/rootfs-update"
+    staging_dir="${state_dir}/staging"
+    rel_image_path="/var/lib/dayshield/rootfs-update/staging/rootfs-${next_version}.squashfs"
+    now="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
     info "Staging rootfs image version '${next_version}' ..."
-    mkdir -p "${image_store}"
+    mkdir -p "${staging_dir}"
     cp -f "${SQUASHFS_IMG}" "${TARGET_MOUNT}${rel_image_path}"
     chmod 644 "${TARGET_MOUNT}${rel_image_path}"
 
-    if [[ "${current_version}" != "${next_version}" ]]; then
+    if [[ "${current_version}" != "${next_version}" && "${current_version}" != "unknown" ]]; then
         previous_version="${current_version}"
     fi
 
-    mkdir -p "${TARGET_MOUNT}/var/lib/dayshield/update" "${TARGET_MOUNT}/boot"
-    cat > "${TARGET_MOUNT}/var/lib/dayshield/update/rootfs-selection.json" <<EOF
+    mkdir -p "${state_dir}" "${TARGET_MOUNT}/boot"
+
+    # Write pending.json — schema matches RootfsVersionMeta (camelCase) in rootfs_update.rs
+    cat > "${state_dir}/pending.json" <<EOF
 {
-  "schemaVersion": 1,
-  "status": "staged",
-  "current": "${current_version}",
-  "next": "${next_version}",
-  "previous": "${previous_version}",
-  "imageStore": "/rootfs-images",
-  "nextImage": "${rel_image_path}",
-  "source": "iso",
-  "preparedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  "version": "${next_version}",
+  "artifactPath": "${rel_image_path}",
+  "recordedAt": "${now}"
 }
 EOF
+
+    # Write current.json only if it does not already exist
+    if [[ ! -f "${state_dir}/current.json" ]]; then
+        cat > "${state_dir}/current.json" <<EOF
+{
+  "version": "${current_version}",
+  "recordedAt": "${now}"
+}
+EOF
+    fi
+
+    # Rotate previous.json when there is a prior version
+    if [[ -n "${previous_version}" ]]; then
+        cat > "${state_dir}/previous.json" <<EOF
+{
+  "version": "${previous_version}",
+  "recordedAt": "${now}"
+}
+EOF
+    fi
 
     cat > "${TARGET_MOUNT}/boot/dayshield-rootfs-next.env" <<EOF
 DAYSHIELD_ROOTFS_NEXT_VERSION=${next_version}
