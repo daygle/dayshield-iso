@@ -100,21 +100,30 @@ jobs:
             INSTALLER_UI_REF_REQUESTED="${{ github.event.inputs.installer_ui_ref || github.event.client_payload.installer_ui_ref || '' }}"
           fi
 
-          # Auto-resolve latest stable rootfs release when no explicit ref is provided.
-          # Use `gh release list` with manual jq filtering — the `--exclude-pre-releases`
-          # CLI flag is unreliable across gh versions, and `gh api /releases/latest`
-          # writes the 404 body to stdout on failure which contaminates the captured
-          # value.  Filtering in jq with `// ""` is the cleanest combination.
+          # Auto-resolve latest rootfs release when no explicit ref is provided.
+          #
+          # We hit the GitHub REST API directly via curl rather than `gh`:
+          #   * /releases?per_page=1 returns the MOST RECENTLY CREATED release
+          #     regardless of whether the "latest" pointer is set (the pointer
+          #     can be missing when releases are created by API automation).
+          #   * Anonymous calls work for public repos, so we do not depend on
+          #     the workflow's GITHUB_TOKEN having cross-repo permissions.
+          #   * curl + jq is universally available on GitHub-hosted runners.
           if [ -z "${ROOTFS_REF:-}" ]; then
-            echo "ROOTFS_REF not provided; resolving latest stable release from ${ROOTFS_REPO}"
-            ROOTFS_REF="$(gh release list --repo "${ROOTFS_REPO}" --limit 30 \
-              --json tagName,isDraft,isPrerelease,publishedAt \
-              --jq '[.[] | select(.isDraft == false and .isPrerelease == false)] | sort_by(.publishedAt) | reverse | .[0].tagName // ""' \
-              2>/dev/null)" || ROOTFS_REF=""
+            echo "ROOTFS_REF not provided; resolving latest release from ${ROOTFS_REPO}"
+            api_response="$(curl -fsSL \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${ROOTFS_REPO}/releases?per_page=1" \
+              2>/dev/null)" || api_response=""
+            ROOTFS_REF=""
+            if [ -n "${api_response}" ]; then
+              ROOTFS_REF="$(printf '%s' "${api_response}" | jq -r '.[0].tag_name // empty' 2>/dev/null)" || ROOTFS_REF=""
+            fi
             if [ -z "${ROOTFS_REF}" ] || [ "${ROOTFS_REF}" = "null" ]; then
-              echo "ERROR: unable to resolve a stable rootfs release tag from ${ROOTFS_REPO}" >&2
-              echo "Available releases (most recent first):" >&2
-              gh release list --repo "${ROOTFS_REPO}" --limit 10 >&2 || true
+              echo "ERROR: unable to resolve a release tag from ${ROOTFS_REPO}" >&2
+              echo "  Diagnostic — first 50 lines of /releases:" >&2
+              curl -sSL "https://api.github.com/repos/${ROOTFS_REPO}/releases?per_page=5" 2>&1 | head -50 >&2 || true
               exit 1
             fi
             echo "  Resolved ROOTFS_REF=${ROOTFS_REF}"
