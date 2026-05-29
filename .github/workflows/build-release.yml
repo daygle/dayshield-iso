@@ -60,8 +60,6 @@ jobs:
         # For tag-push builds the rootfs ref and other inputs are read from
         # release-inputs.env (committed to this repo).  workflow_dispatch and
         # repository_dispatch callers supply the inputs directly.
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" = "push" ]; then
@@ -101,34 +99,73 @@ jobs:
           fi
 
           # Auto-resolve latest rootfs release when no explicit ref is provided.
-          #
-          # We hit the GitHub REST API directly via curl rather than `gh`:
-          #   * /releases?per_page=1 returns the MOST RECENTLY CREATED release
-          #     regardless of whether the "latest" pointer is set (the pointer
-          #     can be missing when releases are created by API automation).
-          #   * Anonymous calls work for public repos, so we do not depend on
-          #     the workflow's GITHUB_TOKEN having cross-repo permissions.
-          #   * curl + jq is universally available on GitHub-hosted runners.
-          if [ -z "${ROOTFS_REF:-}" ]; then
-            echo "ROOTFS_REF not provided; resolving latest release from ${ROOTFS_REPO}"
+          # This uses the public GitHub REST API. A rootfs tag alone is not
+          # enough here: the ISO build consumes release assets uploaded by the
+          # rootfs workflow.
+          resolve_latest_rootfs_release() {
+            local repo="$1" api_response="" result=""
             api_response="$(curl -fsSL \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/repos/${ROOTFS_REPO}/releases?per_page=1" \
+              "https://api.github.com/repos/${repo}/releases?per_page=50" \
               2>/dev/null)" || api_response=""
-            ROOTFS_REF=""
             if [ -n "${api_response}" ]; then
-              ROOTFS_REF="$(printf '%s' "${api_response}" | jq -r '.[0].tag_name // empty' 2>/dev/null)" || ROOTFS_REF=""
+              result="$(printf '%s' "${api_response}" | jq -r '[.[] | select((.draft // false | not) and (.prerelease // false | not) and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+([-.][0-9A-Za-z.]+)?$")))] | sort_by(.published_at // .created_at) | reverse | .[0].tag_name // empty' 2>/dev/null)" || result=""
             fi
+            if [ -n "${result}" ] && [ "${result}" != "null" ]; then
+              printf '%s' "${result}"
+              return 0
+            fi
+            return 1
+          }
+
+          rootfs_release_exists() {
+            local repo="$1" ref="$2"
+            curl -fsSL \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${repo}/releases/tags/${ref}" \
+              >/dev/null 2>&1
+          }
+
+          print_rootfs_release_diagnostics() {
+            local repo="$1" releases=""
+            echo "  Published releases visible publicly:" >&2
+            releases="$(curl -sSL \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${repo}/releases?per_page=10" \
+              2>/dev/null)" || releases=""
+            if [ -n "${releases}" ]; then
+              printf '%s' "${releases}" | jq -r 'if type == "array" then (if length == 0 then "  <none>" else .[] | "  \(.tag_name) published=\(.published_at // .created_at) assets=\(.assets | length)" end) else "  " + (.message // tostring) end' >&2 || true
+            else
+              echo "  <unable to query releases>" >&2
+            fi
+            echo "  Recent matching tags (tags do not contain release assets):" >&2
+            git ls-remote --tags "https://github.com/${repo}.git" 2>/dev/null \
+              | awk -F/ '{print $3}' \
+              | sed 's/\^{}$//' \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$' \
+              | sort -Vu \
+              | tail -10 >&2 || true
+          }
+
+          if [ -z "${ROOTFS_REF:-}" ]; then
+            echo "ROOTFS_REF not provided; resolving latest published rootfs release from ${ROOTFS_REPO}"
+            ROOTFS_REF="$(resolve_latest_rootfs_release "${ROOTFS_REPO}")" || ROOTFS_REF=""
             if [ -z "${ROOTFS_REF}" ] || [ "${ROOTFS_REF}" = "null" ]; then
-              echo "ERROR: unable to resolve a release tag from ${ROOTFS_REPO}" >&2
-              echo "  Diagnostic — first 50 lines of /releases:" >&2
-              curl -sSL "https://api.github.com/repos/${ROOTFS_REPO}/releases?per_page=5" 2>&1 | head -50 >&2 || true
+              echo "ERROR: unable to resolve a published release tag from ${ROOTFS_REPO}" >&2
+              echo "       Create a non-draft rootfs GitHub Release, pass rootfs_ref, or pin ROOTFS_REF in release-inputs.env." >&2
+              print_rootfs_release_diagnostics "${ROOTFS_REPO}"
               exit 1
             fi
             echo "  Resolved ROOTFS_REF=${ROOTFS_REF}"
+          elif ! rootfs_release_exists "${ROOTFS_REPO}" "${ROOTFS_REF}"; then
+            echo "ERROR: rootfs release ${ROOTFS_REPO}@${ROOTFS_REF} was not found publicly." >&2
+            echo "       The ISO build needs GitHub Release assets, not just a git tag." >&2
+            print_rootfs_release_diagnostics "${ROOTFS_REPO}"
+            exit 1
           fi
-
           echo "RELEASE_TAG=${RELEASE_TAG}"                               >> "$GITHUB_ENV"
           echo "ROOTFS_REF=${ROOTFS_REF}"                                 >> "$GITHUB_ENV"
           echo "ROOTFS_REPO=${ROOTFS_REPO}"                               >> "$GITHUB_ENV"
@@ -165,8 +202,6 @@ jobs:
 
       - name: Resolve installer UI ref
         id: resolve_installer_ui_ref
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           REPO="daygle/dayshield-installer-ui"
@@ -216,8 +251,6 @@ jobs:
           echo "installer_ui_ref=${RESOLVED}" >> "$GITHUB_OUTPUT"
 
       - name: Download installer UI payload
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           INSTALLER_REPO="daygle/dayshield-installer-ui"
@@ -253,8 +286,6 @@ jobs:
             mmdebstrap systemd-container
 
       - name: Download rootfs artifact and checksums
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           mkdir -p artifacts
@@ -336,8 +367,6 @@ jobs:
           cat "${ISO_NAME}.sha256"
 
       - name: Create or update ISO release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
