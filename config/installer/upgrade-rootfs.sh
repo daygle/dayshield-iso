@@ -61,13 +61,6 @@ label_device() {
     blkid -L "$1" 2>/dev/null || true
 }
 
-resolve_partition() {
-    local part_name="$1" legacy_label="$2" dev
-    dev="$(label_device "${part_name}")"
-    [[ -n "${dev}" ]] || dev="$(label_device "${legacy_label}")"
-    printf '%s\n' "${dev}"
-}
-
 resolve_efi_partition() {
     local efi_dev
     efi_dev="$(lsblk -nr -o NAME,PARTTYPE "${TARGET_DISK}" 2>/dev/null \
@@ -209,7 +202,7 @@ EOF
 
 ROOT_DEV="$(label_device DS_SYSROOT)"
 BOOT_DEV="$(label_device DAYSHIELD_BOOT)"
-STATE_DEV="$(resolve_partition DS_STATE DAYSHIELD_STATE)"
+STATE_DEV="$(label_device DS_STATE)"
 EFI_DEV="$(resolve_efi_partition)"
 
 [[ -n "${ROOT_DEV}" && -n "${BOOT_DEV}" ]] || \
