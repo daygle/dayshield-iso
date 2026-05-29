@@ -202,6 +202,12 @@ check "finalization helper writes admin auth store contract" \
     grep -q '/etc/dayshield/admin\.json' "${SQ_MOUNT}/usr/local/lib/dayshield/installer-finalize.sh"
 check "finalization helper writes core config.json contract" \
     grep -q '/etc/dayshield/config/config\.json' "${SQ_MOUNT}/usr/local/lib/dayshield/installer-finalize.sh"
+check "finalization helper seeds QoS config contract" \
+    grep -q '"qos": null' "${SQ_MOUNT}/usr/local/lib/dayshield/installer-finalize.sh"
+check "squashfs includes tc for QoS traffic control" \
+    bash -c 'test -x "$1/usr/sbin/tc" || test -x "$1/sbin/tc"' _ "${SQ_MOUNT}"
+check "dayshield service grants CAP_NET_ADMIN for QoS" \
+    bash -c 'grep -Eq "CapabilityBoundingSet=.*CAP_NET_ADMIN" "$1/etc/systemd/system/dayshield.service" || grep -Eq "CapabilityBoundingSet=.*CAP_NET_ADMIN" "$1/etc/systemd/system/dayshield.service.d/dayshield-engine-paths.conf"' _ "${SQ_MOUNT}"
 check "finalization helper writes nftables interface mapping contract" \
     grep -q '/etc/dayshield/config/nft-ifaces\.conf' "${SQ_MOUNT}/usr/local/lib/dayshield/installer-finalize.sh"
 check "finalization helper seeds DHCP contract" \
