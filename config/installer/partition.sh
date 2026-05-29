@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
-# partition.sh - Partition a target disk for DayShield.
+# partition.sh - Partition a target disk for DayShield's A/B image-based update layout.
 #
 # Creates a GPT partition table with:
-#   Partition 1: BIOS boot partition (1 MiB, bios_grub)
-#   Partition 2: EFI System Partition (512 MiB, FAT32)
-#   Partition 3: Shared boot partition (1 GiB, ext4)
-#   Partition 4: System rootfs partition (remaining disk minus state partition, ext4)
-#   Partition 5: Persistent writable state partition (/var, fixed size 8 GiB, ext4)
+#   1. BIOS boot       (1 MiB,   bios_grub)
+#   2. EFI System      (512 MiB, FAT32, DS_EFI)
+#   3. Shared BOOT     (2 GiB,   ext4, DAYSHIELD_BOOT) — GRUB + per-slot kernels
+#   4. ROOT slot A     (5 GiB,   ext4, DS_ROOT_A)
+#   5. ROOT slot B     (5 GiB,   ext4, DS_ROOT_B)
+#   6. Persistent /var (rest,    ext4, DS_STATE)
+#
+# Updates write to the inactive slot; GRUB flips between them via grubenv.
 #
 # Usage: partition.sh <disk>  e.g. partition.sh /dev/sda
 
@@ -17,33 +20,33 @@ DISK="${1:?"Usage: partition.sh <disk>"}"
 [[ -b "${DISK}" ]] || { echo "ERROR: Not a block device: ${DISK}" >&2; exit 1; }
 
 DISK_SIZE_MIB="$(( $(blockdev --getsize64 "${DISK}") / 1024 / 1024 ))"
-MIN_DISK_SIZE_MIB=11264  # 11 GiB minimum: EFI+boot+sysroot+8GiB state
+# 1 + 512 + 2048 + 5120 + 5120 + 4096 (min /var) = 16897 MiB → round to 17 GiB minimum.
+MIN_DISK_SIZE_MIB=17408
 if (( DISK_SIZE_MIB < MIN_DISK_SIZE_MIB )); then
-    echo "ERROR: ${DISK} is too small (${DISK_SIZE_MIB} MiB). Need at least ${MIN_DISK_SIZE_MIB} MiB." >&2
+    echo "ERROR: ${DISK} is too small (${DISK_SIZE_MIB} MiB). Need at least ${MIN_DISK_SIZE_MIB} MiB (17 GiB)." >&2
     exit 1
 fi
 
 echo "--> Wiping existing partition table on ${DISK} …"
-# Zero out the first and last 4 MiB to destroy existing signatures
 dd if=/dev/zero of="${DISK}" bs=1M count=4 conv=fsync 2>/dev/null
 dd if=/dev/zero of="${DISK}" bs=1M count=4 \
     seek=$(( $(blockdev --getsz "${DISK}") / 2048 - 4 )) \
     conv=fsync 2>/dev/null || true
 
-echo "--> Creating GPT partition table on ${DISK} …"
+echo "--> Creating A/B GPT partition table on ${DISK} …"
 parted --script "${DISK}" \
     mklabel gpt \
-    mkpart "BIOS" 1MiB   2MiB \
+    mkpart "BIOS"   1MiB     2MiB \
     set 1 bios_grub on \
-    mkpart "EFI"  fat32  2MiB   514MiB \
+    mkpart "EFI"    fat32    2MiB     514MiB \
     set 2 esp on \
-    mkpart "BOOT" ext4   514MiB 1538MiB \
-    mkpart "SYSROOT" ext4 1538MiB -8192MiB \
-    mkpart "STATE" ext4 -8192MiB 100%
+    mkpart "BOOT"   ext4     514MiB   2562MiB \
+    mkpart "ROOT_A" ext4     2562MiB  7682MiB \
+    mkpart "ROOT_B" ext4     7682MiB  12802MiB \
+    mkpart "STATE"  ext4     12802MiB 100%
 
-# Inform the kernel of the new partition table
 partprobe "${DISK}" 2>/dev/null || true
-udevadm settle 2>/dev/null || true   # wait for udev to process new partition events
+udevadm settle 2>/dev/null || true
 
 echo "--> Partitions created:"
 parted --script "${DISK}" print

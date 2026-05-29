@@ -352,19 +352,37 @@ initialize_rootfs_boot_metadata() {
     current_version="$(detect_installed_rootfs_version "${target}")"
     now="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
-    info "Writing rootfs version metadata (current: ${current_version}) ..."
+    info "Writing A/B slot state (slot A active, version ${current_version}) ..."
     mkdir -p \
         "${target}/var/lib/dayshield/rootfs-update" \
-        "${target}/boot/dayshield/images" \
-        "${target}/boot/dayshield/metadata"
+        "${target}/boot/dayshield/slot-a" \
+        "${target}/boot/dayshield/slot-b"
 
-    # Write current.json — schema matches RootfsVersionMeta (camelCase) in rootfs_update.rs
-    cat > "${target}/var/lib/dayshield/rootfs-update/current.json" <<EOF
+    # Slot state — A is active, B is the rollback target (also at the install version).
+    cat > "${target}/var/lib/dayshield/rootfs-update/slots.json" <<EOF
 {
-  "version": "${current_version}",
+  "currentSlot": "A",
+  "currentVersion": "${current_version}",
+  "standbySlot": "B",
+  "standbyVersion": "${current_version}",
   "recordedAt": "${now}"
 }
 EOF
+
+    # Stage slot A's kernel + initrd under /boot/dayshield/slot-a so GRUB's
+    # static A/B config can find them.  Slot B gets the same kernel staged
+    # because both slots were installed from the same rootfs.
+    local kfile ifile
+    kfile="$(ls -1 "${target}/boot/vmlinuz-"* 2>/dev/null | sort -V | tail -n1 || true)"
+    ifile="$(ls -1 "${target}/boot/initrd.img-"* 2>/dev/null | sort -V | tail -n1 || true)"
+    if [[ -f "${kfile}" ]]; then
+        cp -f "${kfile}" "${target}/boot/dayshield/slot-a/vmlinuz"
+        cp -f "${kfile}" "${target}/boot/dayshield/slot-b/vmlinuz"
+    fi
+    if [[ -f "${ifile}" ]]; then
+        cp -f "${ifile}" "${target}/boot/dayshield/slot-a/initrd.img"
+        cp -f "${ifile}" "${target}/boot/dayshield/slot-b/initrd.img"
+    fi
 }
 
 SQUASHFS_IMG="$(find_squashfs_image || true)"
@@ -615,26 +633,34 @@ info "  LAN CIDR : ${LAN_CIDR}"
 info "Partitioning ${TARGET_DISK} …"
 "${INSTALLER_DIR}/partition.sh" "${TARGET_DISK}"
 
-# Determine partition names (handle nvme, mmcblk naming conventions)
+# Determine partition names (handle nvme, mmcblk naming conventions).
+# A/B layout: 1=BIOS  2=EFI  3=BOOT  4=ROOT_A  5=ROOT_B  6=STATE
 if [[ "${TARGET_DISK}" =~ (nvme|mmcblk) ]]; then
     EFI_PART="${TARGET_DISK}p2"
     BOOT_PART="${TARGET_DISK}p3"
-    SYSROOT_PART="${TARGET_DISK}p4"
-    STATE_PART="${TARGET_DISK}p5"
+    ROOT_A_PART="${TARGET_DISK}p4"
+    ROOT_B_PART="${TARGET_DISK}p5"
+    STATE_PART="${TARGET_DISK}p6"
 else
     EFI_PART="${TARGET_DISK}2"
     BOOT_PART="${TARGET_DISK}3"
-    SYSROOT_PART="${TARGET_DISK}4"
-    STATE_PART="${TARGET_DISK}5"
+    ROOT_A_PART="${TARGET_DISK}4"
+    ROOT_B_PART="${TARGET_DISK}5"
+    STATE_PART="${TARGET_DISK}6"
 fi
+
+# Slot A is the active slot at install time.  SYSROOT_PART keeps the legacy
+# name used by the rest of this script — it points at slot A.
+SYSROOT_PART="${ROOT_A_PART}"
 
 # ---------------------------------------------------------------------------
 # Format
 # ---------------------------------------------------------------------------
-[[ -b "${EFI_PART}" ]]  || error "EFI partition device not found: ${EFI_PART}"
-[[ -b "${BOOT_PART}" ]] || error "Boot partition device not found: ${BOOT_PART}"
-[[ -b "${SYSROOT_PART}" ]] || error "Sysroot partition device not found: ${SYSROOT_PART}"
-[[ -b "${STATE_PART}" ]] || error "State partition device not found: ${STATE_PART}"
+[[ -b "${EFI_PART}" ]]    || error "EFI partition device not found: ${EFI_PART}"
+[[ -b "${BOOT_PART}" ]]   || error "Boot partition device not found: ${BOOT_PART}"
+[[ -b "${ROOT_A_PART}" ]] || error "Root slot A partition device not found: ${ROOT_A_PART}"
+[[ -b "${ROOT_B_PART}" ]] || error "Root slot B partition device not found: ${ROOT_B_PART}"
+[[ -b "${STATE_PART}" ]]  || error "State partition device not found: ${STATE_PART}"
 
 info "Formatting EFI partition: ${EFI_PART}"
 mkfs.fat -F 32 -n "DS_EFI" "${EFI_PART}"
@@ -642,14 +668,17 @@ mkfs.fat -F 32 -n "DS_EFI" "${EFI_PART}"
 info "Formatting shared boot partition: ${BOOT_PART}"
 mkfs.ext4 -F -L "DAYSHIELD_BOOT" "${BOOT_PART}"
 
-info "Formatting system rootfs partition: ${SYSROOT_PART}"
-mkfs.ext4 -F -L "DS_SYSROOT" "${SYSROOT_PART}"
+info "Formatting root slot A: ${ROOT_A_PART}"
+mkfs.ext4 -F -L "DS_ROOT_A" "${ROOT_A_PART}"
+
+info "Formatting root slot B: ${ROOT_B_PART}"
+mkfs.ext4 -F -L "DS_ROOT_B" "${ROOT_B_PART}"
 
 info "Formatting persistent state partition: ${STATE_PART}"
 mkfs.ext4 -F -L "DS_STATE" "${STATE_PART}"
 
 # ---------------------------------------------------------------------------
-# Mount
+# Mount slot A as the active install target
 # ---------------------------------------------------------------------------
 mkdir -p "${TARGET_MOUNT}"
 mount "${SYSROOT_PART}" "${TARGET_MOUNT}"
@@ -659,12 +688,22 @@ mkdir -p "${TARGET_MOUNT}/boot/efi"
 mount "${EFI_PART}" "${TARGET_MOUNT}/boot/efi"
 
 # ---------------------------------------------------------------------------
-# Extract rootfs
+# Extract rootfs to slot A
 # ---------------------------------------------------------------------------
-info "Extracting rootfs squashfs …"
+info "Extracting rootfs squashfs to slot A …"
 "${INSTALLER_DIR}/copy-rootfs.sh" "${SQUASHFS_IMG}" "${TARGET_MOUNT}"
 bootstrap_state_partition "${STATE_PART}"
 mount "${STATE_PART}" "${TARGET_MOUNT}/var"
+
+# ---------------------------------------------------------------------------
+# Extract identical rootfs to slot B so rollback is available from day 1
+# ---------------------------------------------------------------------------
+info "Extracting rootfs squashfs to slot B (rollback target) …"
+SLOT_B_MOUNT="$(mktemp -d /tmp/dayshield-slot-b.XXXXXX)"
+mount "${ROOT_B_PART}" "${SLOT_B_MOUNT}"
+"${INSTALLER_DIR}/copy-rootfs.sh" "${SQUASHFS_IMG}" "${SLOT_B_MOUNT}"
+umount "${SLOT_B_MOUNT}"
+rmdir "${SLOT_B_MOUNT}"
 
 # ---------------------------------------------------------------------------
 # Clean live-boot artefacts from the installed target
@@ -729,21 +768,32 @@ configure_ssh_access
 info "Writing machine-id …"
 truncate -s 0 "${TARGET_MOUNT}/etc/machine-id"
 
-# Write fstab
+# Write fstab.  In the A/B layout, `/` is determined by the kernel's `root=`
+# parameter (GRUB sets it per slot), so the root line uses /dev/root as a
+# placeholder — systemd-fstab-generator resolves it from the kernel cmdline.
+# /boot, /boot/efi, /var are shared between slots, so they use UUIDs.
 info "Writing /etc/fstab …"
-ROOT_UUID="$(blkid -s UUID -o value "${SYSROOT_PART}")"
 BOOT_UUID="$(blkid -s UUID -o value "${BOOT_PART}")"
 EFI_UUID="$(blkid -s UUID -o value "${EFI_PART}")"
 STATE_UUID="$(blkid -s UUID -o value "${STATE_PART}")"
-ROOT_MOUNT_OPTS="defaults,noatime"
-cat > "${TARGET_MOUNT}/etc/fstab" <<EOF
+FSTAB_BODY="$(cat <<EOF
 # /etc/fstab - generated by DayShield installer
-UUID=${ROOT_UUID}  /          ext4  ${ROOT_MOUNT_OPTS}  0  1
+# Root is mounted via the kernel root= parameter; this entry is for fsck order only.
+/dev/root          /          ext4  defaults,noatime  0  1
 UUID=${BOOT_UUID}  /boot      ext4  defaults,noatime  0  2
 UUID=${EFI_UUID}   /boot/efi  vfat  umask=0077        0  2
 UUID=${STATE_UUID} /var       ext4  defaults,noatime  0  2
 tmpfs              /tmp       tmpfs defaults           0  0
 EOF
+)"
+printf '%s\n' "${FSTAB_BODY}" > "${TARGET_MOUNT}/etc/fstab"
+
+# Also write the same fstab into slot B so it boots correctly after rollback.
+SLOT_B_FSTAB_MOUNT="$(mktemp -d /tmp/dayshield-slot-b-fstab.XXXXXX)"
+mount "${ROOT_B_PART}" "${SLOT_B_FSTAB_MOUNT}"
+printf '%s\n' "${FSTAB_BODY}" > "${SLOT_B_FSTAB_MOUNT}/etc/fstab"
+umount "${SLOT_B_FSTAB_MOUNT}"
+rmdir "${SLOT_B_FSTAB_MOUNT}"
 
 # ---------------------------------------------------------------------------
 # Enable systemd-networkd on the target by creating the

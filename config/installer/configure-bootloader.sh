@@ -57,28 +57,87 @@ mkdir -p "${TARGET}/boot/efi/EFI/BOOT"
 cp "${TARGET}/boot/efi/EFI/dayshield/grubx64.efi" \
    "${TARGET}/boot/efi/EFI/BOOT/BOOTX64.EFI"
 
-echo "--> Removing legacy DayShield GRUB fragment if present ..."
-rm -f "${TARGET}/etc/grub.d/09_dayshield_ab"
+# ---------------------------------------------------------------------------
+# Suppress grub-mkconfig - we manage grub.cfg by hand for the A/B layout.
+# Remove any prior auto-generated fragments that would interfere.
+# ---------------------------------------------------------------------------
+rm -f "${TARGET}/etc/grub.d/09_dayshield" \
+      "${TARGET}/etc/grub.d/09_dayshield_ab" \
+      "${TARGET}/etc/grub.d/10_linux" \
+      "${TARGET}/etc/grub.d/30_os-prober"
 
-# ---------------------------------------------------------------------------
-# Write GRUB default configuration
-# ---------------------------------------------------------------------------
-echo "--> Writing /etc/default/grub …"
+echo "--> Writing /etc/default/grub (minimal — grub.cfg is hand-managed) …"
 cat > "${TARGET}/etc/default/grub" <<'EOF'
-GRUB_DEFAULT=0
-GRUB_TIMEOUT=5
+# This file is intentionally minimal.  DayShield manages /boot/grub/grub.cfg
+# directly to implement the A/B slot scheme; grub-mkconfig is not used.
+GRUB_DEFAULT=saved
+GRUB_TIMEOUT=0
+GRUB_TIMEOUT_STYLE=hidden
 GRUB_DISTRIBUTOR="DayShield"
-GRUB_CMDLINE_LINUX_DEFAULT="quiet loglevel=3"
+GRUB_CMDLINE_LINUX_DEFAULT=""
 GRUB_CMDLINE_LINUX=""
 GRUB_TERMINAL_INPUT=console
-GRUB_GFXMODE=auto
+GRUB_DISABLE_OS_PROBER=true
 EOF
 
 # ---------------------------------------------------------------------------
-# Generate grub.cfg inside the chroot
+# Hand-write grub.cfg with A/B menuentries + grubenv slot routing.
+# See dayshield-installer-ui/installer-ui/api/install-bootloader.sh for the
+# same logic in the web-installer path — keep both in sync.
 # ---------------------------------------------------------------------------
-echo "--> Running grub-mkconfig …"
-chroot "${TARGET}" grub-mkconfig -o /boot/grub/grub.cfg
+echo "--> Writing /boot/grub/grub.cfg (A/B slot layout) …"
+mkdir -p "${TARGET}/boot/grub"
+cat > "${TARGET}/boot/grub/grub.cfg" <<'GRUB_EOF'
+set timeout=0
+set timeout_style=hidden
+
+load_env
+
+if [ -z "${saved_entry}" ];   then set saved_entry=ds_a;     fi
+if [ -z "${boot_state}" ];    then set boot_state=confirmed; fi
+
+if [ "${boot_state}" = "trying" ]; then
+    if [ "${boot_attempts_left}" = "0" ] && [ -n "${fallback_entry}" ]; then
+        set default="${fallback_entry}"
+    else
+        set default="${saved_entry}"
+    fi
+else
+    set default="${saved_entry}"
+fi
+
+if [ "${boot_state}" = "trying" ]; then
+    if [ "${boot_attempts_left}" = "3" ]; then
+        set boot_attempts_left=2
+        save_env boot_attempts_left
+    elif [ "${boot_attempts_left}" = "2" ]; then
+        set boot_attempts_left=1
+        save_env boot_attempts_left
+    elif [ "${boot_attempts_left}" = "1" ]; then
+        set boot_attempts_left=0
+        save_env boot_attempts_left
+    fi
+fi
+
+menuentry 'DayShield (slot A)' --id ds_a {
+    search --no-floppy --label DAYSHIELD_BOOT --set=root
+    linux /dayshield/slot-a/vmlinuz root=LABEL=DS_ROOT_A ro
+    initrd /dayshield/slot-a/initrd.img
+}
+
+menuentry 'DayShield (slot B)' --id ds_b {
+    search --no-floppy --label DAYSHIELD_BOOT --set=root
+    linux /dayshield/slot-b/vmlinuz root=LABEL=DS_ROOT_B ro
+    initrd /dayshield/slot-b/initrd.img
+}
+GRUB_EOF
+
+# Seed grubenv with a clean install state — slot A is the active slot.
+chroot "${TARGET}" grub-editenv /boot/grub/grubenv create 2>/dev/null || true
+chroot "${TARGET}" grub-editenv /boot/grub/grubenv set saved_entry=ds_a
+chroot "${TARGET}" grub-editenv /boot/grub/grubenv set boot_state=confirmed
+chroot "${TARGET}" grub-editenv /boot/grub/grubenv unset boot_attempts_left 2>/dev/null || true
+chroot "${TARGET}" grub-editenv /boot/grub/grubenv unset fallback_entry     2>/dev/null || true
 
 cleanup_chroot
 trap - EXIT
