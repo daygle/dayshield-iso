@@ -326,6 +326,10 @@ jobs:
           echo "Using installer UI artifact: ${CHOSEN_ARTIFACT}"
           echo "Using installer UI checksum: ${CHOSEN_SHA256}"
 
+          awk -v expected="${CHOSEN_ARTIFACT}" 'NR == 1 { print $1 "  installer-ui.tar.gz"; next } { gsub(expected, "installer-ui.tar.gz"); print }' \
+            "${ARTIFACT_DIR}/installer-ui.tar.gz.sha256" > "${ARTIFACT_DIR}/installer-ui.tar.gz.sha256.tmp"
+          mv "${ARTIFACT_DIR}/installer-ui.tar.gz.sha256.tmp" "${ARTIFACT_DIR}/installer-ui.tar.gz.sha256"
+
           (cd "${ARTIFACT_DIR}" && sha256sum -c "installer-ui.tar.gz.sha256")
           tar -xzf "${ARTIFACT_DIR}/installer-ui.tar.gz" -C "${INSTALLER_DEST_DIR}"
       - name: Install ISO build dependencies
