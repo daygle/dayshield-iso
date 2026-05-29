@@ -101,13 +101,25 @@ jobs:
           fi
 
           # Auto-resolve latest stable rootfs release when no explicit ref is provided.
+          # Try GitHub's canonical /releases/latest endpoint first, then fall back to
+          # listing releases and filtering with jq — the `gh release list --exclude-pre-releases`
+          # flag is unreliable across gh CLI versions and can hide stable releases.
           if [ -z "${ROOTFS_REF:-}" ]; then
             echo "ROOTFS_REF not provided; resolving latest stable release from ${ROOTFS_REPO}"
-            ROOTFS_REF="$(gh release list --repo "${ROOTFS_REPO}" --limit 1 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[0].tagName')"
+            ROOTFS_REF="$(gh api "repos/${ROOTFS_REPO}/releases/latest" --jq '.tag_name' 2>/dev/null || echo '')"
             if [ -z "${ROOTFS_REF}" ] || [ "${ROOTFS_REF}" = "null" ]; then
-              echo "ERROR: unable to resolve latest stable rootfs release tag from ${ROOTFS_REPO}" >&2
+              echo "  /releases/latest endpoint returned no tag; listing releases and filtering manually"
+              ROOTFS_REF="$(gh release list --repo "${ROOTFS_REPO}" --limit 30 \
+                --json tagName,isDraft,isPrerelease,publishedAt \
+                --jq '[.[] | select(.isDraft == false and .isPrerelease == false)] | sort_by(.publishedAt) | reverse | .[0].tagName // ""')"
+            fi
+            if [ -z "${ROOTFS_REF}" ] || [ "${ROOTFS_REF}" = "null" ]; then
+              echo "ERROR: unable to resolve a stable rootfs release tag from ${ROOTFS_REPO}" >&2
+              echo "Available releases (most recent first):" >&2
+              gh release list --repo "${ROOTFS_REPO}" --limit 10 >&2 || true
               exit 1
             fi
+            echo "  Resolved ROOTFS_REF=${ROOTFS_REF}"
           fi
 
           echo "RELEASE_TAG=${RELEASE_TAG}"                               >> "$GITHUB_ENV"
@@ -153,11 +165,25 @@ jobs:
           REPO="daygle/dayshield-installer-ui"
           CANDIDATE="${INSTALLER_UI_REF_REQUESTED}"
 
-          # If no installer UI ref was requested, use latest stable release.
+          # Resolve latest stable release using the canonical /releases/latest
+          # endpoint, falling back to a manual filter on the release list.
+          resolve_latest_stable() {
+            local repo="$1" result=""
+            result="$(gh api "repos/${repo}/releases/latest" --jq '.tag_name' 2>/dev/null || echo '')"
+            if [ -z "${result}" ] || [ "${result}" = "null" ]; then
+              result="$(gh release list --repo "${repo}" --limit 30 \
+                --json tagName,isDraft,isPrerelease,publishedAt \
+                --jq '[.[] | select(.isDraft == false and .isPrerelease == false)] | sort_by(.publishedAt) | reverse | .[0].tagName // ""')"
+            fi
+            printf '%s' "${result}"
+          }
+
           if [ -z "${CANDIDATE}" ]; then
-            LATEST_STABLE="$(gh release list --repo "${REPO}" --limit 1 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[0].tagName')"
+            LATEST_STABLE="$(resolve_latest_stable "${REPO}")"
             if [ -z "${LATEST_STABLE}" ] || [ "${LATEST_STABLE}" = "null" ]; then
               echo "ERROR: no stable installer UI release found in ${REPO}" >&2
+              echo "Available releases (most recent first):" >&2
+              gh release list --repo "${REPO}" --limit 10 >&2 || true
               exit 1
             fi
             RESOLVED="${LATEST_STABLE}"
@@ -166,9 +192,11 @@ jobs:
             RESOLVED="${CANDIDATE}"
             echo "Resolved installer UI release tag: ${RESOLVED}"
           else
-            LATEST_STABLE="$(gh release list --repo "${REPO}" --limit 1 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[0].tagName')"
+            LATEST_STABLE="$(resolve_latest_stable "${REPO}")"
             if [ -z "${LATEST_STABLE}" ] || [ "${LATEST_STABLE}" = "null" ]; then
               echo "ERROR: no stable installer UI release found in ${REPO}" >&2
+              echo "Available releases (most recent first):" >&2
+              gh release list --repo "${REPO}" --limit 10 >&2 || true
               exit 1
             fi
             RESOLVED="${LATEST_STABLE}"
