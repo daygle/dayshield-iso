@@ -42,10 +42,6 @@ permissions:
 
 jobs:
   build-release:
-    if: >-
-      github.event_name != 'create' ||
-      (github.event.ref_type == 'tag' &&
-      (startsWith(github.event.ref, 'iso-v') || startsWith(github.event.ref, 'v')))
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -191,9 +187,14 @@ jobs:
             echo "Invalid rootfs release tag: ${ROOTFS_REF}" >&2
             exit 1
           fi
-          if [ -n "${INSTALLER_UI_REF_REQUESTED:-}" ] && [[ ! "${INSTALLER_UI_REF_REQUESTED}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
-            echo "Invalid installer UI release tag: ${INSTALLER_UI_REF_REQUESTED}" >&2
-            exit 1
+          if [ -n "${INSTALLER_UI_REF_REQUESTED:-}" ]; then
+            if [[ ! "${INSTALLER_UI_REF_REQUESTED}" =~ ^(v|installer-ui-v)[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
+              echo "Invalid installer UI release tag: ${INSTALLER_UI_REF_REQUESTED}" >&2
+              exit 1
+            fi
+            if [[ "${INSTALLER_UI_REF_REQUESTED}" =~ ^installer-ui-v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
+              echo "WARNING: legacy installer-ui tag format requested (${INSTALLER_UI_REF_REQUESTED}); prefer vX.Y.Z" >&2
+            fi
           fi
           echo "Building ISO tag:    ${RELEASE_TAG}"
           echo "Rootfs repo:         ${ROOTFS_REPO}"
@@ -215,7 +216,12 @@ jobs:
               "https://api.github.com/repos/${repo}/releases?per_page=50" \
               2>/dev/null)" || response=""
             if [ -n "${response}" ]; then
-              result="$(printf '%s' "${response}" | jq -r '[.[] | select((.draft // false | not) and (.prerelease // false | not))] | sort_by(.published_at // .created_at) | reverse | .[0].tag_name // empty' 2>/dev/null)" || result=""
+              # Prefer canonical vX.Y.Z tags first; fall back to any stable release
+              # so older release histories remain usable.
+              result="$(printf '%s' "${response}" | jq -r '[.[] | select((.draft // false | not) and (.prerelease // false | not) and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+([-.][0-9A-Za-z.]+)?$")))] | sort_by(.published_at // .created_at) | reverse | .[0].tag_name // empty' 2>/dev/null)" || result=""
+              if [ -z "${result}" ] || [ "${result}" = "null" ]; then
+                result="$(printf '%s' "${response}" | jq -r '[.[] | select((.draft // false | not) and (.prerelease // false | not))] | sort_by(.published_at // .created_at) | reverse | .[0].tag_name // empty' 2>/dev/null)" || result=""
+              fi
             fi
             printf '%s' "${result}"
           }
@@ -272,34 +278,48 @@ jobs:
         run: |
           set -euo pipefail
           INSTALLER_REPO="daygle/dayshield-installer-ui"
+          INSTALLER_REF_NORMALIZED="${INSTALLER_UI_REF#installer-ui-}"
           INSTALLER_ARTIFACT="installer-ui-${INSTALLER_UI_REF}.tar.gz"
+          INSTALLER_ARTIFACT_ALT="installer-ui-${INSTALLER_REF_NORMALIZED}.tar.gz"
           INSTALLER_SHA256="${INSTALLER_ARTIFACT}.sha256"
+          INSTALLER_SHA256_ALT="${INSTALLER_ARTIFACT_ALT}.sha256"
           ARTIFACT_DIR="${GITHUB_WORKSPACE}/deps-artifacts/installer-ui"
           INSTALLER_DEST_DIR="deps/dayshield-installer-ui"
+          release_json="$(curl -fsSL \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${INSTALLER_REPO}/releases/tags/${INSTALLER_UI_REF}")"
 
-          download_release_asset() {
-            local repo="$1" ref="$2" name="$3" dest="$4" response="" url=""
-            response="$(curl -fsSL \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/repos/${repo}/releases/tags/${ref}")"
-            url="$(printf '%s' "${response}" | jq -r --arg name "${name}" '.assets[] | select(.name == $name) | .browser_download_url' | head -n1)"
+          download_release_asset_with_fallback() {
+            local primary="$1" fallback="$2" dest="$3" url="" chosen=""
+            url="$(printf '%s' "${release_json}" | jq -r --arg name "${primary}" '.assets[] | select(.name == $name) | .browser_download_url' | head -n1)"
+            if [ -n "${url}" ] && [ "${url}" != "null" ]; then
+              chosen="${primary}"
+            elif [ -n "${fallback}" ] && [ "${fallback}" != "${primary}" ]; then
+              url="$(printf '%s' "${release_json}" | jq -r --arg name "${fallback}" '.assets[] | select(.name == $name) | .browser_download_url' | head -n1)"
+              if [ -n "${url}" ] && [ "${url}" != "null" ]; then
+                chosen="${fallback}"
+              fi
+            fi
             if [ -z "${url}" ] || [ "${url}" = "null" ]; then
-              echo "ERROR: missing release asset ${name} in ${repo}@${ref}" >&2
-              printf '%s' "${response}" | jq -r '.assets[].name' >&2 || true
+              echo "ERROR: missing installer-ui release assets (${primary} or ${fallback}) in ${INSTALLER_REPO}@${INSTALLER_UI_REF}" >&2
+              printf '%s' "${release_json}" | jq -r '.assets[].name' >&2 || true
               exit 1
             fi
             curl -fL "${url}" -o "${dest}"
+            printf '%s\n' "${chosen}"
           }
 
           rm -rf "${ARTIFACT_DIR}" "${INSTALLER_DEST_DIR}"
           mkdir -p "${ARTIFACT_DIR}" "${INSTALLER_DEST_DIR}"
 
-          download_release_asset "${INSTALLER_REPO}" "${INSTALLER_UI_REF}" "${INSTALLER_ARTIFACT}" "${ARTIFACT_DIR}/${INSTALLER_ARTIFACT}"
-          download_release_asset "${INSTALLER_REPO}" "${INSTALLER_UI_REF}" "${INSTALLER_SHA256}" "${ARTIFACT_DIR}/${INSTALLER_SHA256}"
+          CHOSEN_ARTIFACT="$(download_release_asset_with_fallback "${INSTALLER_ARTIFACT}" "${INSTALLER_ARTIFACT_ALT}" "${ARTIFACT_DIR}/installer-ui.tar.gz")"
+          CHOSEN_SHA256="$(download_release_asset_with_fallback "${INSTALLER_SHA256}" "${INSTALLER_SHA256_ALT}" "${ARTIFACT_DIR}/installer-ui.tar.gz.sha256")"
+          echo "Using installer UI artifact: ${CHOSEN_ARTIFACT}"
+          echo "Using installer UI checksum: ${CHOSEN_SHA256}"
 
-          (cd "${ARTIFACT_DIR}" && sha256sum -c "${INSTALLER_SHA256}")
-          tar -xzf "${ARTIFACT_DIR}/${INSTALLER_ARTIFACT}" -C "${INSTALLER_DEST_DIR}"
+          (cd "${ARTIFACT_DIR}" && sha256sum -c "installer-ui.tar.gz.sha256")
+          tar -xzf "${ARTIFACT_DIR}/installer-ui.tar.gz" -C "${INSTALLER_DEST_DIR}"
       - name: Install ISO build dependencies
         run: |
           set -euo pipefail
