@@ -101,18 +101,16 @@ jobs:
           fi
 
           # Auto-resolve latest stable rootfs release when no explicit ref is provided.
-          # Try GitHub's canonical /releases/latest endpoint first, then fall back to
-          # listing releases and filtering with jq — the `gh release list --exclude-pre-releases`
-          # flag is unreliable across gh CLI versions and can hide stable releases.
+          # Use `gh release list` with manual jq filtering — the `--exclude-pre-releases`
+          # CLI flag is unreliable across gh versions, and `gh api /releases/latest`
+          # writes the 404 body to stdout on failure which contaminates the captured
+          # value.  Filtering in jq with `// ""` is the cleanest combination.
           if [ -z "${ROOTFS_REF:-}" ]; then
             echo "ROOTFS_REF not provided; resolving latest stable release from ${ROOTFS_REPO}"
-            ROOTFS_REF="$(gh api "repos/${ROOTFS_REPO}/releases/latest" --jq '.tag_name' 2>/dev/null || echo '')"
-            if [ -z "${ROOTFS_REF}" ] || [ "${ROOTFS_REF}" = "null" ]; then
-              echo "  /releases/latest endpoint returned no tag; listing releases and filtering manually"
-              ROOTFS_REF="$(gh release list --repo "${ROOTFS_REPO}" --limit 30 \
-                --json tagName,isDraft,isPrerelease,publishedAt \
-                --jq '[.[] | select(.isDraft == false and .isPrerelease == false)] | sort_by(.publishedAt) | reverse | .[0].tagName // ""')"
-            fi
+            ROOTFS_REF="$(gh release list --repo "${ROOTFS_REPO}" --limit 30 \
+              --json tagName,isDraft,isPrerelease,publishedAt \
+              --jq '[.[] | select(.isDraft == false and .isPrerelease == false)] | sort_by(.publishedAt) | reverse | .[0].tagName // ""' \
+              2>/dev/null)" || ROOTFS_REF=""
             if [ -z "${ROOTFS_REF}" ] || [ "${ROOTFS_REF}" = "null" ]; then
               echo "ERROR: unable to resolve a stable rootfs release tag from ${ROOTFS_REPO}" >&2
               echo "Available releases (most recent first):" >&2
@@ -165,15 +163,17 @@ jobs:
           REPO="daygle/dayshield-installer-ui"
           CANDIDATE="${INSTALLER_UI_REF_REQUESTED}"
 
-          # Resolve latest stable release using the canonical /releases/latest
-          # endpoint, falling back to a manual filter on the release list.
+          # Resolve latest stable release by listing all releases and filtering
+          # with jq.  See the rootfs resolver above for why we avoid the
+          # `gh api /releases/latest` shortcut and the `--exclude-pre-releases` flag.
           resolve_latest_stable() {
             local repo="$1" result=""
-            result="$(gh api "repos/${repo}/releases/latest" --jq '.tag_name' 2>/dev/null || echo '')"
-            if [ -z "${result}" ] || [ "${result}" = "null" ]; then
-              result="$(gh release list --repo "${repo}" --limit 30 \
-                --json tagName,isDraft,isPrerelease,publishedAt \
-                --jq '[.[] | select(.isDraft == false and .isPrerelease == false)] | sort_by(.publishedAt) | reverse | .[0].tagName // ""')"
+            result="$(gh release list --repo "${repo}" --limit 30 \
+              --json tagName,isDraft,isPrerelease,publishedAt \
+              --jq '[.[] | select(.isDraft == false and .isPrerelease == false)] | sort_by(.publishedAt) | reverse | .[0].tagName // ""' \
+              2>/dev/null)" || result=""
+            if [ "${result}" = "null" ]; then
+              result=""
             fi
             printf '%s' "${result}"
           }
