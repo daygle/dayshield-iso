@@ -199,9 +199,9 @@ check "CLI installer includes DAYSHIELD media-label fallback" \
 check "CLI installer checks alternate live-media squashfs paths" \
     grep -q '/media/cdrom/live/filesystem\.squashfs' "${SQ_MOUNT}/usr/lib/dayshield-installer/install.sh"
 check "finalization helper writes admin auth store contract" \
-    grep -q '/etc/dayshield/admin\.json' "${SQ_MOUNT}/usr/local/lib/dayshield/installer-finalize.sh"
+    grep -q '/var/lib/dayshield/admin\.json' "${SQ_MOUNT}/usr/local/lib/dayshield/installer-finalize.sh"
 check "finalization helper writes core config.json contract" \
-    grep -q '/etc/dayshield/config/config\.json' "${SQ_MOUNT}/usr/local/lib/dayshield/installer-finalize.sh"
+    grep -q '/var/lib/dayshield/config/config\.json' "${SQ_MOUNT}/usr/local/lib/dayshield/installer-finalize.sh"
 check "finalization helper seeds QoS config contract" \
     grep -q '"qos": null' "${SQ_MOUNT}/usr/local/lib/dayshield/installer-finalize.sh"
 check "squashfs includes tc for QoS traffic control" \
@@ -209,9 +209,9 @@ check "squashfs includes tc for QoS traffic control" \
 check "dayshield service grants CAP_NET_ADMIN for QoS" \
     bash -c 'grep -Eq "CapabilityBoundingSet=.*CAP_NET_ADMIN" "$1/etc/systemd/system/dayshield.service" || grep -Eq "CapabilityBoundingSet=.*CAP_NET_ADMIN" "$1/etc/systemd/system/dayshield.service.d/dayshield-engine-paths.conf"' _ "${SQ_MOUNT}"
 check "finalization helper writes nftables interface mapping contract" \
-    grep -q '/etc/dayshield/config/nft-ifaces\.conf' "${SQ_MOUNT}/usr/local/lib/dayshield/installer-finalize.sh"
+    grep -q '/var/lib/dayshield/config/nft-ifaces\.conf' "${SQ_MOUNT}/usr/local/lib/dayshield/installer-finalize.sh"
 check "finalization helper seeds DHCP contract" \
-    grep -q '/etc/dayshield/kea-dhcp4\.conf' "${SQ_MOUNT}/usr/local/lib/dayshield/installer-finalize.sh"
+    grep -q '/var/lib/dayshield/kea/kea-dhcp4\.conf' "${SQ_MOUNT}/usr/local/lib/dayshield/installer-finalize.sh"
 check "finalization helper seeds Unbound contract" \
     grep -q '/etc/unbound/unbound\.conf' "${SQ_MOUNT}/usr/local/lib/dayshield/installer-finalize.sh"
 check "firstboot consumes marker before dayshield startup" \
