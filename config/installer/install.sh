@@ -108,16 +108,16 @@ EOF
         local sshd_config_tmp
         sshd_config_tmp="$(mktemp)"
         # Ensure the temp file is removed when this function returns,
-        # whether by normal exit, error, or the outer ERR trap.
+        # cause the script to exit before the explicit rm below runs.
         # shellcheck disable=SC2064
-        trap "rm -f '${sshd_config_tmp}'" RETURN
+        trap "rm -f '${sshd_config_tmp}'" EXIT
         {
             printf '%s\n' 'Include /etc/ssh/sshd_config.d/*.conf'
             cat "${sshd_config}"
         } > "${sshd_config_tmp}"
         cat "${sshd_config_tmp}" > "${sshd_config}"
         rm -f "${sshd_config_tmp}"
-        trap - RETURN
+        trap - EXIT
     fi
 }
 device_base_name() {
@@ -163,7 +163,7 @@ validate_target_disk() {
 
 valid_hostname() {
     local hostname="$1"
-    [[  "${hostname}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$ ]]
+    [[ "${hostname}" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$ ]]
 }
 
 valid_iface_name() {
@@ -484,7 +484,7 @@ collect_install_configuration() {
 
     valid_iface_name "${INSTALL_WAN_IFACE}" || error "Invalid WAN interface name: ${INSTALL_WAN_IFACE}"
     valid_iface_name "${INSTALL_LAN_IFACE}" || error "Invalid LAN interface name: ${INSTALL_LAN_IFACE}"
-    [[  "${INSTALL_WAN_IFACE}" != "${INSTALL_LAN_IFACE}" ]] || error "WAN and LAN interfaces must be different."
+    [[ "${INSTALL_WAN_IFACE}" != "${INSTALL_LAN_IFACE}" ]] || error "WAN and LAN interfaces must be different."
 }
 detect_target_disk() {
     # Look for block devices that are not the live medium
