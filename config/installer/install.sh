@@ -107,12 +107,17 @@ EOF
        ! grep -qE '^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d/\*\.conf([[:space:]]|$)' "${sshd_config}"; then
         local sshd_config_tmp
         sshd_config_tmp="$(mktemp)"
+        # Ensure the temp file is removed when this function returns,
+        # cause the script to exit before the explicit rm below runs.
+        # shellcheck disable=SC2064
+        trap "rm -f '${sshd_config_tmp}'" EXIT
         {
             printf '%s\n' 'Include /etc/ssh/sshd_config.d/*.conf'
             cat "${sshd_config}"
         } > "${sshd_config_tmp}"
         cat "${sshd_config_tmp}" > "${sshd_config}"
         rm -f "${sshd_config_tmp}"
+        trap - EXIT
     fi
 }
 device_base_name() {
