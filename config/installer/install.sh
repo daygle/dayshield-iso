@@ -654,10 +654,6 @@ else
     STATE_PART="${TARGET_DISK}6"
 fi
 
-# Slot A is the active slot at install time.  SYSROOT_PART keeps the legacy
-# name used by the rest of this script — it points at slot A.
-SYSROOT_PART="${ROOT_A_PART}"
-
 # ---------------------------------------------------------------------------
 # Format
 # ---------------------------------------------------------------------------
@@ -686,7 +682,7 @@ mkfs.ext4 -F -L "DS_STATE" "${STATE_PART}"
 # Mount slot A as the active install target
 # ---------------------------------------------------------------------------
 mkdir -p "${TARGET_MOUNT}"
-mount "${SYSROOT_PART}" "${TARGET_MOUNT}"
+mount "${ROOT_A_PART}" "${TARGET_MOUNT}"
 mkdir -p "${TARGET_MOUNT}/boot"
 mount "${BOOT_PART}" "${TARGET_MOUNT}/boot"
 mkdir -p "${TARGET_MOUNT}/boot/efi"
