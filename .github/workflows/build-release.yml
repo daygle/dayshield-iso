@@ -193,7 +193,7 @@ jobs:
           fi
           if [ -n "${INSTALLER_UI_REF_REQUESTED:-}" ]; then
             if [[ ! "${INSTALLER_UI_REF_REQUESTED}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$ ]]; then
-              echo "Invalid installer UI release tag: ${INSTALLER_UI_REF_REQUESTED}" >&2
+              echo "Invalid installer UI release tag: ${INSTALLER_UI_REF_REQUESTED} (expected: vX.Y.Z)" >&2
               exit 1
             fi
           fi
@@ -218,8 +218,6 @@ jobs:
               "https://api.github.com/repos/${repo}/releases?per_page=50" \
               2>/dev/null)" || response=""
             if [ -n "${response}" ]; then
-              # Prefer canonical vX.Y.Z tags first; fall back to any stable release
-              # so older release histories remain usable.
               result="$(printf '%s' "${response}" | jq -r '[.[] | select((.draft // false | not) and (.prerelease // false | not) and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+([-.][0-9A-Za-z.]+)?$")))] | sort_by(.published_at // .created_at) | reverse | .[0].tag_name // empty' 2>/dev/null)" || result=""
             fi
             printf '%s' "${result}"
